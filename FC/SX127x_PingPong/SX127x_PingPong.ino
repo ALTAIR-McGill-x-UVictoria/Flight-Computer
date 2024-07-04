@@ -16,11 +16,11 @@
 //#define INITIATING_NODE
 
 // SX1278 has the following connections:
-// NSS pin:   10
-// DIO0 pin:  2
+// NSS pin:   10  //CS
+// DIO0 pin:  2   //
 // NRST pin:  9
 // DIO1 pin:  3
-SX1278 radio = new Module(10, 2, 9, 3);
+SX1276 radio = new Module(10, 2, 9, 3);
 
 // or using RadioShield
 // https://github.com/jgromes/RadioShield
