@@ -3,21 +3,31 @@
 // #include <RadioLib.h>
 #include <ArduinoQueue.h>
 #include "Waveshare_10Dof-D.h"
-#include "radioLogic.h"
+#include "RadioLogic.h"
 
-radioLogic radio;
+
+RadioLogic radio;
+
+// RH_RF95 rf95(RFM95_CS, RFM95_INT);
+// RH_RF95 rf95;
 
 void setup() {
+
+  // radio = new RadioLogic();
+  // rf95 = radio.rf95
+  
   Serial.begin(115200);
   Serial.println("Initializing");
-  radio = new radioLogic();
+  radio.initializeRadio();
   
 
   Serial.println("Running main loop");
+
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  radio.txLoop();
+  radio.radioTx();
 
 }
