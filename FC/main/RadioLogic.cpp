@@ -10,6 +10,7 @@ void RadioLogic::initializeRadio(){
 
     // RH_RF95 rf95(RFM95_CS, RFM95_INT);
     // RH_RF95 rf95 = RadioLogic.rf95;
+    // RH_RF95 rad = this.rf95;
 
     pinMode(RFM95_RST, OUTPUT);
     digitalWrite(RFM95_RST, HIGH);
@@ -23,7 +24,9 @@ void RadioLogic::initializeRadio(){
     digitalWrite(RFM95_RST, HIGH);
     delay(10);
 
-    while (!rf95.init()) {
+    // Serial.println("DEBUG");
+
+    while (!this->rf95.init()) {
       Serial.println("LoRa radio init failed");
       Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
       while (1);
@@ -32,14 +35,14 @@ void RadioLogic::initializeRadio(){
 
 
     // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
-    if (!rf95.setFrequency(RF95_FREQ)) {
+    if (!this->rf95.setFrequency(RF95_FREQ)) {
       Serial.println("setFrequency failed");
       while (1);
     }
 
     Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
 
-    rf95.setTxPower(RF95_POWER, false);
+    this->rf95.setTxPower(RF95_POWER, false);
 }
 
 void RadioLogic::radioTx(){
@@ -55,25 +58,26 @@ void RadioLogic::radioTx(){
 
   Serial.println("Sending...");
   delay(10);
-  rf95.send((uint8_t *)radiopacket, 20);
+  this->rf95.send((uint8_t *)radiopacket, 20);
 
   Serial.println("Waiting for packet to complete...");
   delay(10);
 
-  rf95.waitPacketSent();
+  // radio.rf95.mode();
+  this->rf95.waitPacketSent();
   Serial.println("==DEBUG==");
   // Now wait for a reply
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
 
   Serial.println("Waiting for reply...");
-  if (rf95.waitAvailableTimeout(1000)) {
+  if (this->rf95.waitAvailableTimeout(1000)) {
     // Should be a reply message for us now
-    if (rf95.recv(buf, &len)) {
+    if (this->rf95.recv(buf, &len)) {
       Serial.print("Got reply: ");
       Serial.println((char*)buf);
       Serial.print("RSSI: ");
-      Serial.println(rf95.lastRssi(), DEC);
+      Serial.println(this->rf95.lastRssi(), DEC);
     } else {
       Serial.println("Receive failed");
     }

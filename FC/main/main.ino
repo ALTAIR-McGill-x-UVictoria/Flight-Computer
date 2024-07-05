@@ -5,6 +5,7 @@
 #include "Waveshare_10Dof-D.h"
 #include "RadioLogic.h"
 
+#define TEENSYDUINO
 
 RadioLogic radio;
 
@@ -27,7 +28,10 @@ void setup() {
 }
 
 void loop() {
+  Serial.println(radio.rf95.getDeviceVersion());//debugging tool
   // put your main code here, to run repeatedly:
+  
   radio.radioTx();
+  
 
 }

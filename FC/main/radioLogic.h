@@ -18,8 +18,10 @@ class RadioLogic{
     public:
 
     RH_RF95 rf95;
+    RH_RF95 *ptr;
     RadioLogic(){
       RH_RF95 rf95(RFM95_CS, RFM95_INT);
+      ptr = &rf95;
       // RH_RF95 rf95;
       // rf95 = *rad;
 
