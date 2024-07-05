@@ -12,3 +12,5 @@ Radio Commands:
 - lh: LED high
 - ll: LED low
 - ds [angle]: set angle of driver
+- ds: Start daq write to SD
+- de: Stop daq write to SD
