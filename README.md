@@ -8,9 +8,9 @@ Radio Packet Format:
   - Pressure, temperature, altitude: int32_t (32 bits, 4 bytes)
 
 Radio Commands:
-- pp: ping
-- lh: LED high
-- ll: LED low
-- ds [angle]: set angle of driver
-- ds: Start daq write to SD
-- de: Stop daq write to SD
+1 - pp: ping
+2 - lh: LED high
+3 - ll: LED low
+4 - ds [angle]: set angle of driver
+5 - ds: Start daq write to SD
+6 - de: Stop daq write to SD
