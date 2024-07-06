@@ -12,6 +12,6 @@ Radio Commands:
 1. ping: pong
 2. ledon [value]: LED on at value
 3. ledoff: LED off
-4. ds [angle]: set angle of driver
-5. ds: Start daq write to SD
-6. de: Stop daq write to SD
+4. dangle [angle]: set angle of driver
+5. sdwrite: Start daq write to SD
+6. sdstop: Stop daq write to SD
