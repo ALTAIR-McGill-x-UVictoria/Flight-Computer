@@ -1,6 +1,9 @@
 // Receive with start- and end-markers combined with parsing
 
 #include <math.h>
+#include <ArduinoQueue.h>
+
+#define QUEUE_SIZE 10
 
 const byte numChars = 32;
 char receivedChars[numChars];
@@ -15,6 +18,8 @@ String commandPacket;
 
 boolean newData = false;
 
+ArduinoQueue<String> queue(QUEUE_SIZE);
+
 //============
 
 void setup() {
@@ -27,9 +32,26 @@ void setup() {
 //============
 
 void loop() {
-    recvWithStartEndMarkers();
-    commandPacket = commandParser();
+
     
+
+  recvWithStartEndMarkers();
+  commandPacket = commandParser();
+  queue.enqueue(commandPacket);
+
+  if(queue.isEmpty() != 1){
+      String temp = queue.getHead();
+      // Serial.println(queue.getHead());
+      if(temp[0] == "0"){//opposite
+        Serial.print("Command: "); Serial.println(queue.dequeue());
+      }
+    }
+    // Serial.println(queue.isEmpty());
+
+    
+
+    // while(1);
+
     
 }
 
