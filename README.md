@@ -12,9 +12,11 @@ Radio Commands:
 1. ping: pong
 2. ledon [value]: LED on at value
 3. ledoff: LED off
-4. dangle [angle]: set angle of driver
-5. sdwrite: Start daq write to SD
-6. sdstop: Stop daq write to SD
+4. ledbright [value]: Set the bright of the LEDs. 
+5. dangle [angle]: set angle of driver
+6. sdwrite: Start daq write to SD
+7. sdstop: Stop daq write to SD
+
 
 Radio logic loop:
 1. FC starts in transmit mode, GS starts in receive mode
