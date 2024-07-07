@@ -15,3 +15,9 @@ Radio Commands:
 4. dangle [angle]: set angle of driver
 5. sdwrite: Start daq write to SD
 6. sdstop: Stop daq write to SD
+
+Radio logic loop:
+1. FC starts in transmit mode, GS starts in receive mode
+2. FC transmits one (or more) packet(s), flags last packet with set to receive, switch to receive and waits x ms
+3. GS receives packet with flag, switch to transmit send command then switch back to receive
+4. If FC receives packet confirmation (code >= 0), instantly switch to transmit (back to step 2), else if no packet reception for duration of wait switch back to step 2
