@@ -1,5 +1,7 @@
 // Receive with start- and end-markers combined with parsing
 
+#include <math.h>
+
 const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];        // temporary array for use by strtok() function
@@ -9,7 +11,7 @@ char messageFromPC[numChars] = {0};
 int integerFromPC = 0;
 float floatFromPC = 0.0;
 
-int commandCode = 0;
+String commandPacket;
 
 boolean newData = false;
 
@@ -26,10 +28,8 @@ void setup() {
 
 void loop() {
     recvWithStartEndMarkers();
-    commandCode = commandParser();
-    if(commandCode > 0){
-      // Serial.println(commandCode);
-    }
+    commandPacket = commandParser();
+    
     
 }
 
@@ -100,7 +100,7 @@ void showParsedData() {
     Serial.println();
 }
 
-int commandParser(){
+String commandParser(){
   if (newData == true) { 
         strcpy(tempChars, receivedChars);
             // this temporary copy is necessary to protect the original data
@@ -108,54 +108,64 @@ int commandParser(){
         parseData();
         // showParsedData();
         
-        int code = 0;
+        // int code = 0;
+        String dat = "0,000.00";
 
         if(strcmp(messageFromPC,"ping") == 0){
-          code = 1;
-          Serial.print(code); Serial.print(": ");
+          // code = 1;
+          dat = "1,000.00";
+          Serial.print(dat); Serial.print(": ");
           Serial.println("pong");
           
         }
         else if(strcmp(messageFromPC,"ledon") == 0){
-          code = 2;
-          Serial.print(code); Serial.print(": ");
+          // code = 2;
+          floatFromPC = fmodf(floatFromPC, 10.0f);
+          dat = "2," + (String) floatFromPC;
+          dat.c_str();
+          Serial.print(dat); Serial.print(": ");
           Serial.print("LED on, intensity: "); Serial.println(floatFromPC);
           
         }
         else if(strcmp(messageFromPC,"ledoff") == 0){
-          code = 3;
-          Serial.print(code); Serial.print(": ");
+          // code = 3;
+          dat = "3,000.00";
+          Serial.print(dat); Serial.print(": ");
           Serial.println("LED off");
           
         }
         else if(strcmp(messageFromPC,"dangle") == 0){
-          code = 4;
-          Serial.print(code); Serial.print(": ");
+          // code = 4;
+          floatFromPC = abs(fmodf(floatFromPC, 360.0f));
+          dat = "4," + (String) floatFromPC;
+          Serial.print(dat); Serial.print(": ");
           Serial.print("Set driver angle to: "); Serial.println(floatFromPC);
           
         }
         else if(strcmp(messageFromPC,"sdwrite") == 0){
-          code = 5;
-          Serial.print(code); Serial.print(": ");
+          // code = 5;
+          dat = "5,000.00";
+          Serial.print(dat); Serial.print(": ");
           Serial.println("Start DAQ write to SD");
           
         }
         else if(strcmp(messageFromPC,"sdstop") == 0){
-          code = 6;
-          Serial.print(code); Serial.print(": ");
+          // code = 6;
+          dat = "6,000.00";
+          Serial.print(dat); Serial.print(": ");
           Serial.println("Stop DAQ write to SD");
           
         }
         else {
-          code = 0;
-          Serial.print(code); Serial.print(": ");
+          String dat = "0,000.00";
+          Serial.print(dat); Serial.print(": ");
           Serial.print("Error: "); Serial.print(messageFromPC); Serial.println(" is not a valid command");
           
         }
 
 
         newData = false;
-        return code;
+        return dat;
         
     }
 
