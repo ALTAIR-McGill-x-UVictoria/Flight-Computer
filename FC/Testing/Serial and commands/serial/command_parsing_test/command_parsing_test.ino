@@ -10,7 +10,7 @@ char receivedChars[numChars];
 char tempChars[numChars];        // temporary array for use by strtok() function
 
       // variables to hold the parsed data
-char messageFromPC[numChars] = {0};
+char messageFromPC[numChars] = "0";
 int integerFromPC = 0;
 float floatFromPC = 0.0;
 
@@ -24,9 +24,15 @@ ArduinoQueue<String> queue(QUEUE_SIZE);
 
 void setup() {
     Serial.begin(9600);
-    // Serial.println("This demo expects 3 pieces of data - text, an integer and a floating point value");
-    // Serial.println("Enter data in this style <text,12,24.7>  ");
     Serial.println("Start Loop");
+
+    // while (!Serial.available() && millis() < 5000) ;  // wait up to 5 seconds for a serial monitor
+    // if (CrashReport) {
+    //     Serial.print(CrashReport);
+    //     // sometimes if I am hitting repeating crashes... might add
+    //     // while (Serial.read() == -1);  // wait for someone to enter something
+    //     // while (Serial.read() != -1) ;  // and eat up the line.
+    // }
 }
 
 //============
@@ -34,25 +40,25 @@ void setup() {
 void loop() {
 
     
-
+  // Serial.println("debug");
   recvWithStartEndMarkers();
   commandPacket = commandParser();
-  queue.enqueue(commandPacket);
+  // queue.enqueue(commandPacket);
 
-  if(queue.isEmpty() != 1){
-      String temp = queue.getHead();
-      // Serial.println(queue.getHead());
-      if(temp[0] == "0"){//opposite
-        Serial.print("Command: "); Serial.println(queue.dequeue());
-      }
-    }
+  // if(queue.isEmpty() != 1){
+  //     String temp = queue.getHead();
+  //     // Serial.println(queue.getHead());
+  //     if(temp[0] == "0"){//opposite
+  //       Serial.print("Command: "); Serial.println(queue.dequeue());
+  //     }
+  //   }
     // Serial.println(queue.isEmpty());
 
     
 
     // while(1);
 
-    
+    delay(500);
 }
 
 //============
@@ -67,8 +73,11 @@ void recvWithStartEndMarkers() {
     // if(Serial.available() > 0){
     //   recvInProgress = true;
     // }
-
+    // Serial.println(Serial.available());
+    // Serial.println("here");
+    
     while (Serial.available() > 0 && newData == false) {
+        // while(1);
         rc = Serial.read();
 
         // if (recvInProgress == true) {
@@ -101,14 +110,33 @@ void parseData() {
     char * strtokIndx; // this is used by strtok() as an index
 
     strtokIndx = strtok(tempChars," ");      // get the first part - the string
-    strcpy(messageFromPC, strtokIndx); // copy it to messageFromPC
-  
+    // Serial.print(strtokIndx); Serial.print("-"); Serial.println(strtokIndx != NULL);
+    if(NULL != strtokIndx)
+    {
+      strcpy(messageFromPC, strtokIndx);
+
+    }
+
     strtokIndx = strtok(NULL, " "); // this continues where the previous call left off
-    floatFromPC = atof(strtokIndx);
+    
+    if(NULL != strtokIndx)
+    {
+      floatFromPC = atof(strtokIndx);     // convert this part to an integer
+    }
 
     strtokIndx = strtok(NULL, " ");
-    integerFromPC = atoi(strtokIndx);
+    if(NULL != strtokIndx)
+    {
+    integerFromPC = atoi(strtokIndx);   // convert this part to an integer
+    }
+
+    
+
+
+    
 }
+
+
 
 //============
 
@@ -127,6 +155,12 @@ String commandParser(){
         strcpy(tempChars, receivedChars);
             // this temporary copy is necessary to protect the original data
             //   because strtok() replaces the commas with \0
+        // Serial.print(Serial.available()); Serial.print(": "); Serial.println(receivedChars);
+        // if(Serial.available() > 0){
+        //   while(1);
+        // }
+        // Serial.println(tempChars);
+
         parseData();
         // showParsedData();
         
@@ -184,7 +218,8 @@ String commandParser(){
           Serial.print("Error: "); Serial.print(messageFromPC); Serial.println(" is not a valid command");
           
         }
-
+        strcpy(receivedChars,"0");
+        // Serial.flush();
 
         newData = false;
         return dat;
