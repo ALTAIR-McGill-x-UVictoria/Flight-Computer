@@ -1,8 +1,7 @@
 #define ANALOG_IN_PIN 23
 
-// Adjust resistor values 
-float R2 = 3485;
-float R1 = 10040;
+float R2 = 3560;
+float R1 = 10000;
 
 float voltage;
 
@@ -31,9 +30,9 @@ float battery_voltage() {
 
 float average_battery_voltage(){
   float average = 0;
-  for(int i = 0; i < 1000; i++){
+  for(int i = 0; i < 100; i++){
     average += battery_voltage();
   }
-  average /= 1000;
+  average /= 100;
   return average;
 }
