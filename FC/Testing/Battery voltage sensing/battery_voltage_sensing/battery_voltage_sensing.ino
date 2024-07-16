@@ -1,7 +1,8 @@
 #define ANALOG_IN_PIN 23
 
-float R2 = 3420;
-float R1 = 10030;
+// Adjust resistor values 
+float R2 = 3485;
+float R1 = 10040;
 
 float voltage;
 
@@ -13,11 +14,11 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  voltage = battery_voltage();
+  voltage = average_battery_voltage();
   Serial.print(voltage);
   Serial.print(" V");
   Serial.println();
-  delay(100);
+  delay(50);
 }
 
 float battery_voltage() {
@@ -26,4 +27,13 @@ float battery_voltage() {
   float conversionFactor = 3.3/(1024*resistorRatio);
   float voltage = (float)(adcValue*conversionFactor);
   return voltage;
+}
+
+float average_battery_voltage(){
+  float average = 0;
+  for(int i = 0; i < 1000; i++){
+    average += battery_voltage();
+  }
+  average /= 1000;
+  return average;
 }
