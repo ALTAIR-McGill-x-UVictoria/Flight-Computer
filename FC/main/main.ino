@@ -24,9 +24,9 @@
 #define TX_POWER 20
 
 //LED pin definitions
-#define PWM_LED1 1
-#define PWM_LED2 2
-#define PWM_LED3 3
+#define PWM_LED1 24
+#define PWM_LED2 28
+#define PWM_LED3 29
 
 //Battery voltage definitions
 #define ANALOG_IN_PIN 23
@@ -112,11 +112,17 @@ void setup() {
 
   #if LED_ENABLE
   pinMode(PWM_LED1, OUTPUT);
+  pinMode(PWM_LED2, OUTPUT);
+  pinMode(PWM_LED3, OUTPUT);
   #endif
 
   pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
 
+  #if SD_ENABLE
   SDWrite("System init complete");
+  #endif
+
+  // Serial.println("Init complete");
 }
 
 void loop() {
@@ -125,17 +131,17 @@ void loop() {
     fullSensorLoop();
   }
 
-  packetForm = formRadioPacket(1);
+  // packetForm = formRadioPacket(1);
   
   if(enableSDWrite == 1){  
-    // SDWrite(formRadioPacket(1));
-    SDWrite(packetForm);
+    SDWrite(formRadioPacket(1));
+    // SDWrite(packetForm);
   }
 
   if(RX_ENABLE){
     if(sendTimer >= LOOP_TIMER){
-      // radioTx(formRadioPacket(1));
-      radioTx(packetForm);
+      radioTx(formRadioPacket(1));
+      // radioTx(packetForm);
       sendTimer = 0;
     }
   }
@@ -166,7 +172,7 @@ void radioSetup(){
   delay(10);
 
   while (!rf95.init()) {
-    // Serial.println("LoRa radio init failed");
+    Serial.println("LoRa radio init failed");
     // Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
     while (1);
   }
@@ -174,7 +180,7 @@ void radioSetup(){
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(RF95_FREQ)) {
-    // Serial.println("setFrequency failed");
+    Serial.println("setFrequency failed");
     while (1);
   }
 
