@@ -1,25 +1,50 @@
-# Flight-Computer
+112w n2q1`a A # Flight-Computer
 
 Radio Packet Format:
 
-- Full (subject to change): ||RSSI:xxx,SNR:xx,Roll:xxxx.xx,Pitch:xxxx.xx,Yaw:xxxx.xx,Pressure:xxxx.xx,Temperature:xxxx.xx,Altitude:xxxx.xx,LED:xx.x||
-- Data sizes:
-  - Roll, pitch, yaw: float (32 bits, 4 bytes)
-  - Pressure, temperature, altitude: int32_t (32 bits, 4 bytes)
+- Full:
 
 Radio Commands:
 0. none
 1. ping: pong
-2. ledon [value]: LED on at value
-3. ledoff: LED off
-4. ledbright [value]: Set the bright of the LEDs. 
-5. dangle [angle]: set angle of driver
-6. sdwrite: Start daq write to SD
-7. sdstop: Stop daq write to SD
+2. led1 [value]: LED #1 on at [value]
+3. led2 [value]: LED #2 on at [value]
+4. led3 [value]: LED #3 on at [value]
+5. ledoff: LED off
+6. ledbright [value]: Set the bright of the LEDs. 
+7. dangle [angle]: set angle of driver
+8. sdwrite: Start DAQ write to SD
+9. sdstop: Stop DAQ write to SD
+10. sdclear: Delete the all current data written on SD
 
+Code definitions:
+At the top of the code file (.ino), there are definitions for pins and functionalities. Listed here are the ones which can be changed. 
+
+- CALLSIGN: the current operator's callsign (can keep Ben's advanced license callsign)
+- LoRa parameters:
+  - RF95_FREQ: the frequency to be used (keep at 433.0)
+  - SF: spreading factor (optimal: 8, longer range, slower data: 12)
+  - BW: bandwidth (optimal: 125000, longer range, slower data: 62000)
+  - TX_POWER: transceiver output power, keep at 20 dBm (highest)
+
+- Functionalities (0: disabled, 1: enabled):
+  - RX_ENABLE: enables radio transceiver on this device
+  - DAQ_ENABLE: enables IMU
+  - SD_ENABLE: enables SD
+  - LED_ENABLE: enables LEDs (warning: if LED power is plugged in, the LEDs will flash very bright when the Teensy is powered on)
+  - ENABLE_SERIAL: enables printing packets to the serial moitor, useful for debugging. Note: must be disabled (0) when on battery power
+
+
+
+FC order of operations:
+0. (Initialize radio, IMU, SD)
+1. Form radio packet (DAQ, LED status, SD status)
+2. Write to SD
+3. Ragio logic (transmit then receive)
+4. Set LED PWM (0 to 255) 
 
 Radio logic loop:
 1. FC starts in transmit mode, GS starts in receive mode
-2. FC transmits one (or more) packet(s), flags last packet with set to receive, switch to receive and waits x ms
+2. FC transmits one packet, flags last packet with set to receive, switch to receive and waits 2500 ms (timeout)
 3. GS receives packet with flag, switch to transmit send command then switch back to receive
-4. If FC receives packet confirmation (code >= 0), instantly switch to transmit (back to step 2), else if no packet reception for duration of wait switch back to step 2
+4. If FC receives packet confirmation, instantly switch to transmit (skip timeout, back to step 2), else if no packet reception for duration of wait switch back to step 2

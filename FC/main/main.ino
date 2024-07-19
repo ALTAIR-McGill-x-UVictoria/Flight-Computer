@@ -1,4 +1,3 @@
-
 //Flight Computer Main
 
 // #include <RadioLib.h>
@@ -10,24 +9,50 @@
 #include "Waveshare_10Dof-D.h"
 #include <SD.h>
 
-bool gbSenserConnectState = false;
+//Callsign
+#define CALLSIGN "VA2ETD"
 
+//Radio pin definitions
 #define RFM95_RST 5
 #define RFM95_CS 10
 #define RFM95_INT 4
 
-// Change to 434.0 or other frequency, must match RX's freq!
+//LoRa parameters definitions
 #define RF95_FREQ 433.0
-
+#define SF 8
+#define BW 125000
+#define TX_POWER 20
 
 //LED pin definitions
-#define PWM_LED 3
+#define PWM_LED1 1
+#define PWM_LED2 2
+#define PWM_LED3 3
 
 //Battery voltage definitions
 #define ANALOG_IN_PIN 23
-float R2 = 3485;
-float R1 = 10040;
+float R2 = 3730;
+float R1 = 10010;
 float voltage;
+
+//Functionality enable definitions
+#define RX_ENABLE 1
+#define DAQ_ENABLE 1
+#define SD_ENABLE 1
+#define LED_ENABLE 1
+#define DAQ_DEBUG 0
+#define SD_DEBUG 0
+#define LOOP_TIMER 50
+
+#define ENABLE_SERIAL 1 //Enable Serial port
+
+//Radio loop timer (fastest transmission speed)
+
+
+//end of definitions
+
+
+
+
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -44,87 +69,80 @@ volatile bool enableSDWrite = 0;
 
 //Command parser variables
 const byte numChars = 32;
-char receivedChars[numChars];
+// char receivedChars[numChars];
 char tempChars[numChars];        // temporary array for use by strtok() function
 
-      // variables to hold the parsed data
-char messageFromPC[numChars] = {0};
+// variables to hold the parsed data
 int cmdCode = 0;
 float floatArg = 0.0;
 
 String commandPacket;
 
-boolean newData = false;
-
-//DEBUGGING
-#define RX_ENABLE 1
-#define LED_ENABLE 0
-#define DAQ_DEBUG 0
-
-#define LOOP_TIMER 1000
-
 volatile int pong_flag = 0;
 
 
-volatile int ledStatus = 0;
+volatile int led1Status = 0;
+volatile int led2Status = 0;
+volatile int led3Status = 0;
 volatile int ledIntensity = 0;
 
 char * packetToSend;
+char * packetForm;
 
 
 void setup() {
 
-  // radio = new RadioLogic();
-  // rf95 = radio.rf95
-  
+  #if ENABLE_SERIAL
   // Serial.begin(115200);
   while (!Serial && (millis() < 3000));
-
   Serial.println("Initializing");
-  radioSetup();
-  sensorSetup();
-  SDSetup();
+  #endif
 
+  #if RX_ENABLE
+  radioSetup();
+  #endif
+
+  #if DAQ_ENABLE
+  sensorSetup();
+  #endif
+
+  #if SD_ENABLE
+  SDSetup();
+  #endif
+
+  #if LED_ENABLE
+  pinMode(PWM_LED1, OUTPUT);
+  #endif
 
   pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
-  pinMode(PWM_LED, OUTPUT);
 
-  
-
-  Serial.println("Running main loop");
   SDWrite("System init complete");
-
 }
 
 void loop() {
-  // Serial.println(radio.rf95.getDeviceVersion());//debugging tool
-  // put your main code here, to run repeatedly:
 
   if(DAQ_DEBUG){
     fullSensorLoop();
   }
+
+  packetForm = formRadioPacket(1);
   
-  if(enableSDWrite == 1){
-    
-    SDWrite(formRadioPacket(1));
-    // Serial.println("Write");
-    
+  if(enableSDWrite == 1){  
+    // SDWrite(formRadioPacket(1));
+    SDWrite(packetForm);
   }
 
   if(RX_ENABLE){
-    
-    if(sendTimer >= 1000){
-      radioTx(formRadioPacket(1));
+    if(sendTimer >= LOOP_TIMER){
+      // radioTx(formRadioPacket(1));
+      radioTx(packetForm);
       sendTimer = 0;
     }
   }
 
-
-
   if(LED_ENABLE == 1){
     LEDhandler();
   }
-
 
 }
 
@@ -135,11 +153,11 @@ void radioSetup(){
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
-  Serial.begin(115200);
-  while (!Serial) delay(1);
-  delay(100);
+  // Serial.begin(115200);
+  // while (!Serial) delay(1);
+  // delay(100);
 
-  Serial.println("Feather LoRa TX Test!");
+  // Serial.println("Feather LoRa TX Test!");
 
   // manual reset
   digitalWrite(RFM95_RST, LOW);
@@ -148,92 +166,79 @@ void radioSetup(){
   delay(10);
 
   while (!rf95.init()) {
-    Serial.println("LoRa radio init failed");
-    Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
+    // Serial.println("LoRa radio init failed");
+    // Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
     while (1);
   }
-  Serial.println("LoRa radio init OK!");
+  // Serial.println("LoRa radio init OK!");
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(RF95_FREQ)) {
-    Serial.println("setFrequency failed");
+    // Serial.println("setFrequency failed");
     while (1);
   }
+
+  #if ENABLE_SERIAL
   Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
+  #endif
 
-  // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
-
-  // The default transmitter power is 13dBm, using PA_BOOST.
-  // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
-  // you can set transmitter powers from 5 to 23 dBm:
-  rf95.setTxPower(20, false);
+  rf95.setSignalBandwidth(BW);
+  rf95.setSpreadingFactor(SF);
+  rf95.setTxPower(TX_POWER, false);
 
 }
 
 void radioTx(char radiopacket[100]){
 
-  // delay(1000); // Wait 1 second between transmits, could also 'sleep' here!
-  // Serial.println("Transmitting..."); // Send a message to rf95_server
-
-  // char radiopacket[20] = "Hello World";
-  // itoa(packetnum++, radiopacket+13, 10);
-  // Serial.print("Sending "); Serial.println(radiopacket);
-  // radiopacket[19] = 0;
-
-  // Serial.println("Sending...");
-  // delay(10);
   rf95.send((uint8_t *)radiopacket, 100);
-
-  // Serial.println("Waiting for packet to complete...");
-  // delay(10);
   rf95.waitPacketSent();
-  // Now wait for a reply
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
 
-  // Serial.println("Waiting for reply...");
-  if (rf95.waitAvailableTimeout(200)) { //test if necessary, blocks all other processes (annoying)
+  if (rf95.waitAvailableTimeout(2500)) { //test if necessary, blocks all other processes (annoying)
     // Should be a reply message for us now
     if (rf95.recv(buf, &len)) {
       // Serial.print("Got reply: ");
+      #if ENABLE_SERIAL
       Serial.println((char*)buf);
-      Serial.print("RSSI: ");
-      Serial.println(rf95.lastRssi(), DEC);
+      Serial.print("RSSI: "); 
+      Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(", SNR: ");
+      Serial.println(rf95.lastSNR(), DEC);
+      #endif
 
       FCpacketParser((char*)buf); //parse and execute the received packet
-
-      //debugging
-      // Serial.print("LED: "); Serial.println(ledStatus);
 
     } else {
       // Serial.println("Receive failed");
     }
   } else {
+    #if ENABLE_SERIAL
     Serial.println("No reply, is there a listener around?");
+    #endif
   }
 }
 
 void sensorSetup(){
-  bool bRet;
   IMU_EN_SENSOR_TYPE enMotionSensorType, enPressureType;
   // Serial.begin(115200);
 
   imuInit(&enMotionSensorType, &enPressureType);
   if(IMU_EN_SENSOR_TYPE_ICM20948 == enMotionSensorType)
   {
-    Serial.println("Motion sersor is ICM-20948");
+    // Serial.println("Motion sersor is ICM-20948");
   }
   else
   {
-    Serial.println("Motion sersor NULL");
+    // Serial.println("Motion sersor NULL");
   }
   if(IMU_EN_SENSOR_TYPE_BMP280 == enPressureType)
   {
-    Serial.println("Pressure sersor is BMP280");
+    // Serial.println("Pressure sersor is BMP280");
   }
   else
   {
-    Serial.println("Pressure sersor NULL");
+    // Serial.println("Pressure sersor NULL");
   }
   delay(200);
 
@@ -275,7 +280,8 @@ void parseData() {
       // split the data into its parts
     char * strtokIndx; // this is used by strtok() as an index
 
-    strtokIndx = strtok(tempChars,",");      // get the first part - the string
+    strtokIndx = strtok(tempChars,":");  
+    strtokIndx = strtok(NULL, ","); 
     // Serial.print(strtokIndx); Serial.print("-"); Serial.println(strtokIndx != NULL);
     if(NULL != strtokIndx)
     {
@@ -293,16 +299,16 @@ void parseData() {
 }
 
 void SDSetup(){
-  Serial.print("Initializing SD card...");
+  // Serial.print("Initializing SD card...");
 
   // see if the card is present and can be initialized:
   if (!SD.begin(BUILTIN_SDCARD)) {
-    Serial.println("Card failed, or not present");
+    // Serial.println("Card failed, or not present");
     while (1) {
       // No SD card, so don't do anything more - stay stuck here
     }
   }
-  Serial.println("Card initialized.");
+  // Serial.println("Card initialized.");
 }
 
 void SDWrite(String log){
@@ -313,28 +319,41 @@ void SDWrite(String log){
     dataFile.print(millis()); dataFile.print(": "); dataFile.println(log);
     dataFile.close();
     // print to the serial port too:
+    #if SD_DEBUG
+    #if ENABLE_SERIAL
     Serial.println(log);
+    #endif
+    #endif
+
   } else {
     // if the file isn't open, pop up an error:
-    Serial.println("error opening datalog.txt");
+    // Serial.println("error opening datalog.txt");
   }
 }
 
 char* formRadioPacket(bool enable_daq){ //includes DAQ
+  String packet = "";
   if(enable_daq == 1){
 
-    String packet = "";
+    
     imuDataGet( &stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
     pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
 
-    packet = packet + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + 
+    packet = packet + CALLSIGN + ":" + pong_flag + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + 
     (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," +
-    ledStatus + "," + ledIntensity + "," + enableSDWrite + "," + pong_flag;
+    led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + rf95.lastRssi() + "," + rf95.lastSNR();
 
     pong_flag = 0;
 
     return packet.c_str();
-  }
+  } 
+  //default small packet
+  packet = packet + pong_flag + "," + battery_voltage() + "," +
+  led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+
+  pong_flag = 0;
+
+  return packet.c_str();
 }
 
 void FCpacketParser(char* packet){
@@ -346,7 +365,8 @@ void FCpacketParser(char* packet){
     // strcpy(temp,packet);
 
 
-    strtokIndx = strtok(packet,",");      // get the first part - the string
+    strtokIndx = strtok(packet,":");
+    strtokIndx = strtok(NULL, ",");      // get the first part - the string
     // Serial.print(strtokIndx); Serial.print("-"); Serial.println(strtokIndx != NULL);
     if(NULL != strtokIndx)
     {
@@ -369,33 +389,68 @@ void FCpacketParser(char* packet){
       break;
 
       case 2:
-        //ledon
-        ledStatus = 1;
+        //ledon1
         ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        if(ledIntensity == 0){
+          led1Status = 0;
+        } else{
+          led1Status = 1;
+        }
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
 
       break;
 
       case 3:
+        //ledon1
+        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        if(ledIntensity == 0){
+          led2Status = 0;
+        } else{
+          led2Status = 1;
+        }
+        // Serial.print("LED ON at "); Serial.println(ledIntensity);
+
+      break;
+
+      case 4:
+        //ledon
+        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        if(ledIntensity == 0){
+          led3Status = 0;
+        } else{
+          led3Status = 1;
+        }
+        // Serial.print("LED ON at "); Serial.println(ledIntensity);
+
+      break;
+
+      case 5:
         //ledoff
-        ledStatus = 0;
+        led1Status = 0;
+        led2Status = 0;
+        led3Status = 0;
+        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
         // Serial.println("LED OFF");
       
       break;
 
-      case 4: 
+      case 6: 
         //dangle
         //TODO
       break;
 
-      case 5:
+      case 7:
         //sdwrite
         enableSDWrite = 1;
       break;
 
-      case 6:
+      case 8:
         //sdstop
         enableSDWrite = 0;
+      break;
+
+      case 9:
+        SD.remove("datalog.txt");//to test
       break;
 
       default:
@@ -414,10 +469,8 @@ float battery_voltage() {
 }
 
 void LEDhandler(){
-  if(ledStatus == 1){
-    analogWrite(PWM_LED, ledIntensity);
-  } else{
-    analogWrite(PWM_LED, 0);
-  }
+  analogWrite(PWM_LED1, ledIntensity * led1Status);
+  analogWrite(PWM_LED2, ledIntensity * led2Status);
+  analogWrite(PWM_LED3, ledIntensity * led3Status);
 
 }
