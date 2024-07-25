@@ -490,15 +490,21 @@ void LEDhandler(){
 
   if(toggleLEDblink == 1){
     //blink
+    
+    
     if(LEDtimer <= LEDtimerInput){
-      analogWrite(PWM_LED1, ledIntensity * led1Status);//if status = 0, off
-      analogWrite(PWM_LED2, ledIntensity * led2Status);//if 1, on
+      //off
+      analogWrite(PWM_LED1, 0);
+      analogWrite(PWM_LED2, 0);
+      analogWrite(PWM_LED3, 0);
+      
+    } else if (LEDtimer <= LEDtimerInput * 2) {
+      analogWrite(PWM_LED1, ledIntensity * led1Status);
+      analogWrite(PWM_LED2, ledIntensity * led2Status);
       analogWrite(PWM_LED3, ledIntensity * led3Status);
-    } else if (LEDtimer >= LEDtimerInput * 2) {
+      
+    } else if (LEDtimer > 2 * LEDtimerInput){
       LEDtimer = 0;
-      analogWrite(PWM_LED1, ledIntensity * led1Status);//if status = 0, off
-      analogWrite(PWM_LED2, ledIntensity * led2Status);//if 1, on
-      analogWrite(PWM_LED3, ledIntensity * led3Status);
     }
 
   } else{
