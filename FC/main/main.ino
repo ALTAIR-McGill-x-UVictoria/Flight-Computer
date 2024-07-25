@@ -467,6 +467,10 @@ void FCpacketParser(char* packet){
         LEDtimerInput = commandArg;
       break; 
 
+      case 11:
+        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+      break;
+
       default:
       break;
 
