@@ -85,6 +85,9 @@ volatile int led1Status = 0;
 volatile int led2Status = 0;
 volatile int led3Status = 0;
 volatile int ledIntensity = 0;
+int toggleLEDblink = 0;
+elapsedMillis LEDtimer;
+float LEDtimerInput = 0;
 
 char * packetToSend;
 char * packetForm;
@@ -459,6 +462,11 @@ void FCpacketParser(char* packet){
         SD.remove("datalog.txt");//to test
       break;
 
+      case 10:
+        toggleLEDblink = !toggleLEDblink;
+        LEDtimerInput = commandArg;
+      break; 
+
       default:
       break;
 
@@ -475,8 +483,26 @@ float battery_voltage() {
 }
 
 void LEDhandler(){
-  analogWrite(PWM_LED1, ledIntensity * led1Status);
-  analogWrite(PWM_LED2, ledIntensity * led2Status);
-  analogWrite(PWM_LED3, ledIntensity * led3Status);
+
+  if(toggleLEDblink == 1){
+    //blink
+    if(LEDtimer <= LEDtimerInput){
+      analogWrite(PWM_LED1, ledIntensity * led1Status);//if status = 0, off
+      analogWrite(PWM_LED2, ledIntensity * led2Status);//if 1, on
+      analogWrite(PWM_LED3, ledIntensity * led3Status);
+    } else if (LEDtimer >= LEDtimerInput * 2) {
+      LEDtimer = 0;
+      analogWrite(PWM_LED1, ledIntensity * led1Status);//if status = 0, off
+      analogWrite(PWM_LED2, ledIntensity * led2Status);//if 1, on
+      analogWrite(PWM_LED3, ledIntensity * led3Status);
+    }
+
+  } else{
+    //default handle
+    analogWrite(PWM_LED1, ledIntensity * led1Status);
+    analogWrite(PWM_LED2, ledIntensity * led2Status);
+    analogWrite(PWM_LED3, ledIntensity * led3Status);
+  }
+
 
 }
