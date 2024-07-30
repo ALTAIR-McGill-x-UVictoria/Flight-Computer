@@ -41,7 +41,7 @@ float voltage;
 #define LED_ENABLE 1
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
-#define LOOP_TIMER 50
+#define LOOP_TIMER 500
 
 #define ENABLE_SERIAL 1 //Enable Serial port
 
