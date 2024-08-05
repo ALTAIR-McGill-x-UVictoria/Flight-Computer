@@ -43,7 +43,7 @@ float voltage;
 #define SD_DEBUG 0
 #define LOOP_TIMER 500
 
-#define ENABLE_SERIAL 1 //Enable Serial port
+#define ENABLE_SERIAL 0 //Enable Serial port
 
 //Radio loop timer (fastest transmission speed)
 
@@ -92,6 +92,7 @@ float LEDtimerInput = 0;
 char * packetToSend;
 char * packetForm;
 
+int toggleLongPacket = 0;
 
 void setup() {
 
@@ -134,17 +135,16 @@ void loop() {
     fullSensorLoop();
   }
 
-  // packetForm = formRadioPacket(1);
   
   if(enableSDWrite == 1){  
     SDWrite(formRadioPacket(1));
-    // SDWrite(packetForm);
+    
   }
 
   if(RX_ENABLE){
     if(sendTimer >= LOOP_TIMER){
-      radioTx(formRadioPacket(1));
-      // radioTx(packetForm);
+      radioTx(formRadioPacket(toggleLongPacket));
+      
       sendTimer = 0;
     }
   }
@@ -340,26 +340,26 @@ void SDWrite(String log){
   }
 }
 
-char* formRadioPacket(bool enable_daq){ //includes DAQ
+char* formRadioPacket(bool enable_long){ //includes DAQ
   String packet = "";
-  if(enable_daq == 1){
+  if(enable_long == 1){
 
     
     imuDataGet( &stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
     pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
 
     packet = packet + CALLSIGN + ":" + pong_flag + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + 
-    (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," +
+    stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," +
     led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + rf95.lastRssi() + "," + rf95.lastSNR();
 
     pong_flag = 0;
 
     return packet.c_str();
-  } 
-  //default small packet
-  packet = packet + pong_flag + "," + battery_voltage() + "," +
-  led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+  }
 
+  //default small packet
+  packet = packet + CALLSIGN + ":" + pong_flag + "," + battery_voltage() + "," + rf95.lastRssi() + "," + rf95.lastSNR();
+  
   pong_flag = 0;
 
   return packet.c_str();
@@ -469,6 +469,10 @@ void FCpacketParser(char* packet){
 
       case 11:
         ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+      break;
+
+      case 12:
+        toggleLongPacket = !toggleLongPacket;
       break;
 
       default:
