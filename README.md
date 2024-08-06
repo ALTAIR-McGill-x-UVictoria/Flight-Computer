@@ -1,8 +1,8 @@
-112w n2q1`a A # Flight-Computer
+Flight-Computer
 
 Radio Packet Format:
 
-- Full:
+TODO
 
 Radio Commands:
 0. none
@@ -11,11 +11,14 @@ Radio Commands:
 3. led2 [value]: LED #2 on at [value]
 4. led3 [value]: LED #3 on at [value]
 5. ledoff: LED off
-6. ledbright [value]: Set the bright of the LEDs. 
 7. dangle [angle]: set angle of driver
 8. sdwrite: Start DAQ write to SD
 9. sdstop: Stop DAQ write to SD
 10. sdclear: Delete the all current data written on SD
+11. ledblink [time]: Enable LED blinking at [time] ms intervals
+12. ledbright [value]: Set the brightness of the LEDs
+13. togglelong: Toggle the full flight computer packet transmission
+
 
 Code definitions:
 At the top of the code file (.ino), there are definitions for pins and functionalities. Listed here are the ones which can be changed. 
