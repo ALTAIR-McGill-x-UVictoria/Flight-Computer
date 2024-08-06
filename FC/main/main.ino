@@ -13,15 +13,22 @@
 #define CALLSIGN "VA2ETD"
 
 //Radio pin definitions
-#define RFM95_RST 5
-#define RFM95_CS 10
-#define RFM95_INT 4
+//Radio #1
+#define RFM96_RST 5
+#define RFM96_CS 10
+#define RFM96_INT 4
+//Radio #2
+#define RFM95_RST 7
+#define RFM95_CS 37
+#define RFM95_INT 6
 
 //LoRa parameters definitions
-#define RF95_FREQ 433.0
+#define RF96_FREQ 433.0 //TX 
+#define RF95_FREQ 903.0 //RX
 #define SF 8
 #define BW 125000
 #define TX_POWER 20
+
 
 //LED pin definitions
 #define PWM_LED1 24
@@ -35,15 +42,16 @@ float R1 = 10010;
 float voltage;
 
 //Functionality enable definitions
-#define RX_ENABLE 1
+#define RX_ENABLE 0
+#define TX_ENABLE 1
 #define DAQ_ENABLE 1
 #define SD_ENABLE 1
 #define LED_ENABLE 1
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
-#define LOOP_TIMER 500
+#define LOOP_TIMER 200
 
-#define ENABLE_SERIAL 0 //Enable Serial port
+#define ENABLE_SERIAL 1 //Enable Serial port
 
 //Radio loop timer (fastest transmission speed)
 
@@ -51,11 +59,10 @@ float voltage;
 //end of definitions
 
 
-
-
-
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
+RH_RF95 rf96(RFM96_CS, RFM96_INT);
+
 
 IMU_ST_ANGLES_DATA stAngles;
 IMU_ST_SENSOR_DATA stGyroRawData;
@@ -102,8 +109,12 @@ void setup() {
   Serial.println("Initializing");
   #endif
 
+  #if TX_ENABLE
+  radio433Setup();
+  #endif
+
   #if RX_ENABLE
-  radioSetup();
+  radio903Setup();
   #endif
 
   #if DAQ_ENABLE
@@ -140,14 +151,20 @@ void loop() {
     SDWrite(formRadioPacket(1));
     
   }
+  
+  if(sendTimer >= LOOP_TIMER){
 
-  if(RX_ENABLE){
-    if(sendTimer >= LOOP_TIMER){
-      radioTx(formRadioPacket(toggleLongPacket));
-      
-      sendTimer = 0;
+    if(TX_ENABLE){      
+      radioTxDuplex(formRadioPacket(toggleLongPacket));
     }
+
+    if(RX_ENABLE){
+      radioRxDuplex();
+    }
+
+    sendTimer = 0;
   }
+
 
   if(LED_ENABLE == 1){
     LEDhandler();
@@ -158,7 +175,7 @@ void loop() {
 
 
 
-void radioSetup(){
+void radio903Setup(){
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
@@ -188,13 +205,50 @@ void radioSetup(){
   }
 
   #if ENABLE_SERIAL
-  Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
+  Serial.print("Set Rx to: "); Serial.println(RF95_FREQ);
   #endif
 
   rf95.setSignalBandwidth(BW);
   rf95.setSpreadingFactor(SF);
   rf95.setTxPower(TX_POWER, false);
+}
 
+void radio433Setup(){
+  pinMode(RFM95_RST, OUTPUT);
+  digitalWrite(RFM95_RST, HIGH);
+
+  // Serial.begin(115200);
+  // while (!Serial) delay(1);
+  // delay(100);
+
+  // Serial.println("Feather LoRa TX Test!");
+
+  // manual reset
+  digitalWrite(RFM96_RST, LOW);
+  delay(10);
+  digitalWrite(RFM96_RST, HIGH);
+  delay(10);
+
+  while (!rf96.init()) {
+    Serial.println("LoRa radio init failed");
+    // Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
+    while (1);
+  }
+  // Serial.println("LoRa radio init OK!");
+
+  // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
+  if (!rf95.setFrequency(RF96_FREQ)) {
+    Serial.println("setFrequency failed");
+    while (1);
+  }
+
+  #if ENABLE_SERIAL
+  Serial.print("Set Tx to: "); Serial.println(RF96_FREQ);
+  #endif
+
+  rf96.setSignalBandwidth(BW);
+  rf96.setSpreadingFactor(SF);
+  rf96.setTxPower(TX_POWER, false);
 }
 
 void radioTx(char radiopacket[100]){
@@ -225,6 +279,30 @@ void radioTx(char radiopacket[100]){
     #if ENABLE_SERIAL
     Serial.println("No reply, is there a listener around?");
     #endif
+  }
+}
+
+void radioTxDuplex(char radiopacket[100]){
+  rf96.send((uint8_t *)radiopacket, 100);
+  rf96.waitPacketSent();
+}
+
+void radioRxDuplex(){
+  if (rf95.available()){
+
+    uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+    uint8_t len = sizeof(buf);
+
+    if(rf95.recv(buf, &len)){
+      digitalWrite(LED_BUILTIN, HIGH);
+      Serial.println((char*)buf);
+      Serial.print("RSSI: ");
+      Serial.print(rf95.lastRssi(), DEC);
+      Serial.print(", SNR: ");
+      Serial.println(rf95.lastSNR(), DEC);
+      
+    }
+    
   }
 }
 
