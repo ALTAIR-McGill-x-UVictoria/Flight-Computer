@@ -194,6 +194,7 @@ void radioSetup(){
   rf95.setSignalBandwidth(BW);
   rf95.setSpreadingFactor(SF);
   rf95.setTxPower(TX_POWER, false);
+  // rf95.setModemConfig(rf95.)
 
 }
 
@@ -399,36 +400,39 @@ void FCpacketParser(char* packet){
 
       case 2:
         //ledon1
-        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-        if(ledIntensity == 0){
-          led1Status = 0;
-        } else{
-          led1Status = 1;
-        }
+        // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        // if(ledIntensity == 0){
+        //   led1Status = 0;
+        // } else{
+        //   led1Status = 1;
+        // }
+        led1Status = !led1Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
 
       break;
 
       case 3:
         //ledon1
-        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-        if(ledIntensity == 0){
-          led2Status = 0;
-        } else{
-          led2Status = 1;
-        }
+        // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        // if(ledIntensity == 0){
+        //   led2Status = 0;
+        // } else{
+        //   led2Status = 1;
+        // }
+        led2Status = !led2Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
 
       break;
 
       case 4:
         //ledon
-        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-        if(ledIntensity == 0){
-          led3Status = 0;
-        } else{
-          led3Status = 1;
-        }
+        // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        // if(ledIntensity == 0){
+        //   led3Status = 0;
+        // } else{
+        //   led3Status = 1;
+        // }
+        led3Status = !led3Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
 
       break;
@@ -438,7 +442,7 @@ void FCpacketParser(char* packet){
         led1Status = 0;
         led2Status = 0;
         led3Status = 0;
-        ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+        // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
         // Serial.println("LED OFF");
       
       break;
