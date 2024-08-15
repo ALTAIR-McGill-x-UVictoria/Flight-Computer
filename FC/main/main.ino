@@ -8,14 +8,15 @@
 #include <RH_RF95.h>
 #include "Waveshare_10Dof-D.h"
 #include <SD.h>
+#include <Bonezegei_DRV8825.h>
 
 //Callsign
 #define CALLSIGN "VA2ETD"
 
 //Radio pin definitions
-#define RFM95_RST 5
+#define RFM95_RST 37
 #define RFM95_CS 10
-#define RFM95_INT 4
+#define RFM95_INT 36
 
 //LoRa parameters definitions
 #define RF95_FREQ 433.0
@@ -37,15 +38,54 @@ float voltage;
 //Functionality enable definitions
 #define RX_ENABLE 1
 #define DAQ_ENABLE 1
-#define SD_ENABLE 1
-#define LED_ENABLE 1
+#define SD_ENABLE 0
+#define LED_ENABLE 0
+#define STEPPER_ENABLE 1
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
-#define LOOP_TIMER 500
-
-#define ENABLE_SERIAL 0 //Enable Serial port
 
 //Radio loop timer (fastest transmission speed)
+#define LOOP_TIMER 500
+#define FLIGHT_MODE_COUNT 5
+#define FLIGHT_MODE_TIMER 200
+
+#define ENABLE_SERIAL 1 //Enable Serial port
+
+//Stepper motor definitions
+//TO CHANGE
+// #define DIR_PIN 39
+// #define STEP_PIN 38
+// // #define SLEEP_PIN 4 //set to 3.3
+// // #define RESET_PIN 5 //set to 3.3
+// #define FAULT_PIN 40
+
+// #define M0_PIN 33
+// #define M1_PIN 34
+// #define M2_PIN 35
+
+
+#define DIR_PIN 2
+#define STEP_PIN 3
+#define SLEEP_PIN 4
+#define RESET_PIN 5
+#define FAULT_PIN 6
+
+#define M0_PIN 7
+#define M1_PIN 8
+#define M2_PIN 9
+
+#define STEPS_PER_REV 200
+
+#define NUM_LEDS 3
+
+#define CW 0
+#define CCW 1
+
+#define USER 0
+#define SYS 1
+
+
+
 
 
 //end of definitions
@@ -54,7 +94,7 @@ float voltage;
 
 
 
-// Singleton instance of the radio driver
+// Singleton instances
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 IMU_ST_ANGLES_DATA stAngles;
@@ -63,7 +103,8 @@ IMU_ST_SENSOR_DATA stAccelRawData;
 IMU_ST_SENSOR_DATA stMagnRawData;
 int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
 
-elapsedMillis sendTimer;
+Bonezegei_DRV8825 stepper(DIR_PIN, STEP_PIN);
+
 
 volatile bool enableSDWrite = 0;
 
@@ -76,23 +117,48 @@ char tempChars[numChars];        // temporary array for use by strtok() function
 int cmdCode = 0;
 float floatArg = 0.0;
 
+//Local variables
 String commandPacket;
 
-volatile int pong_flag = 0;
-
+volatile int reception_confirm = 0;
 
 volatile int led1Status = 0;
 volatile int led2Status = 0;
 volatile int led3Status = 0;
 volatile int ledIntensity = 0;
 int toggleLEDblink = 0;
+
+elapsedMillis sendTimer;
 elapsedMillis LEDtimer;
+
 float LEDtimerInput = 0;
 
 char * packetToSend;
 char * packetForm;
 
 int toggleLongPacket = 0;
+int toggleFlightMode = 0;
+int transmissionCounter = 0;
+
+//Stepper motor variables
+float angleToSet = 0;
+int speed = 2000;
+int step_division = 4;
+
+double partial_steps = 0;
+bool curr_dir = CW;
+int steps_left = 0;
+bool step_lock = false;
+int total_steps = 0;
+
+float payload_yaw = 0; 
+float last_payload_yaw = 0;
+bool toggle_yaw_stabilization = false;
+
+double currentStepperAngle = 0;
+
+#define LED_PIN 13
+bool led_state = false;
 
 void setup() {
 
@@ -120,13 +186,19 @@ void setup() {
   pinMode(PWM_LED3, OUTPUT);
   #endif
 
-  pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
+  // pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
 
   #if SD_ENABLE
   SDWrite("System init complete");
   #endif
 
-  // Serial.println("Init complete");
+  #if ENABLE_SERIAL
+  Serial.println("Init complete");
+  #endif
+
+  #if STEPPER_ENABLE
+  stepperSetup();
+  #endif
 }
 
 void loop() {
@@ -142,20 +214,37 @@ void loop() {
   }
 
   if(RX_ENABLE){
-    if(sendTimer >= LOOP_TIMER){
+
+    if(toggleFlightMode == 0){
+
+      if(sendTimer >= LOOP_TIMER){
       radioTx(formRadioPacket(toggleLongPacket));
       
       sendTimer = 0;
+      }
+
+    } else{
+      
+      if(sendTimer >= FLIGHT_MODE_TIMER){
+
+        radioTx(formRadioPacket(toggleLongPacket));
+      
+        sendTimer = 0;
+      }
+
     }
+
+    
   }
 
-  if(LED_ENABLE == 1){
+  if(LED_ENABLE){
     LEDhandler();
   }
 
+  if(STEPPER_ENABLE){
+    stepperHandler();
+  }
 }
-
-
 
 
 void radioSetup(){
@@ -205,7 +294,12 @@ void radioTx(char radiopacket[100]){
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
 
-  if (rf95.waitAvailableTimeout(2500)) { //test if necessary, blocks all other processes (annoying)
+  if(toggleFlightMode == 1 && transmissionCounter < FLIGHT_MODE_COUNT){
+    transmissionCounter++;
+    return;
+  } else {
+    transmissionCounter = 0;
+    if (rf95.waitAvailableTimeout(2500)) { //test if necessary, blocks all other processes (annoying)
     // Should be a reply message for us now
     if (rf95.recv(buf, &len)) {
       // Serial.print("Got reply: ");
@@ -222,11 +316,14 @@ void radioTx(char radiopacket[100]){
     } else {
       // Serial.println("Receive failed");
     }
-  } else {
-    #if ENABLE_SERIAL
-    Serial.println("No reply, is there a listener around?");
-    #endif
+    } else {
+      #if ENABLE_SERIAL
+      Serial.println("No reply, is there a listener around?");
+      #endif
+    }
   }
+
+  
 }
 
 void sensorSetup(){
@@ -348,27 +445,28 @@ char* formRadioPacket(bool enable_long){ //includes DAQ
     
     imuDataGet( &stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
     pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+    payload_yaw = stAngles.fYaw;
 
-    packet = packet + CALLSIGN + ":" + pong_flag + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + 
+    packet = packet + CALLSIGN + ":" + reception_confirm + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + 
     stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," +
     led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + rf95.lastRssi() + "," + rf95.lastSNR();
 
-    pong_flag = 0;
+    reception_confirm = 0;
 
     return packet.c_str();
   }
 
   //default small packet
-  packet = packet + CALLSIGN + ":" + pong_flag + "," + battery_voltage() + "," + rf95.lastRssi() + "," + rf95.lastSNR();
+  packet = packet + CALLSIGN + ":" + reception_confirm + "," + battery_voltage() + "," + rf95.lastRssi() + "," + rf95.lastSNR();
   
-  pong_flag = 0;
+  reception_confirm = 0;
 
   return packet.c_str();
 }
 
 void FCpacketParser(char* packet){
-    int commandCode;
-    float commandArg;
+    int commandCode = 0;
+    float commandArg = 0.0f;
         // split the data into its parts
     char * strtokIndx; // this is used by strtok() as an index
     // char * temp;
@@ -395,7 +493,7 @@ void FCpacketParser(char* packet){
       case 1:
         //ping
         // Serial.println("              pong");
-        pong_flag = 1;
+        reception_confirm = 1;
       break;
 
       case 2:
@@ -408,6 +506,7 @@ void FCpacketParser(char* packet){
         // }
         led1Status = !led1Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
+        reception_confirm = 1;
 
       break;
 
@@ -421,6 +520,7 @@ void FCpacketParser(char* packet){
         // }
         led2Status = !led2Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
+        reception_confirm = 1;
 
       break;
 
@@ -434,6 +534,7 @@ void FCpacketParser(char* packet){
         // }
         led3Status = !led3Status;
         // Serial.print("LED ON at "); Serial.println(ledIntensity);
+        reception_confirm = 1;
 
       break;
 
@@ -444,42 +545,84 @@ void FCpacketParser(char* packet){
         led3Status = 0;
         // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
         // Serial.println("LED OFF");
+        reception_confirm = 1;
       
       break;
 
       case 6: 
         //dangle
-        //TODO
+        angleToSet = commandArg;
+        set_abs_angle((double) angleToSet);
+
+        reception_confirm = 1;
+
       break;
 
       case 7:
         //sdwrite
         enableSDWrite = 1;
+
+        reception_confirm = 1;
       break;
 
       case 8:
         //sdstop
         enableSDWrite = 0;
+
+        reception_confirm = 1;
       break;
 
       case 9:
         SD.remove("datalog.txt");//to test
+
+        reception_confirm = 1;
       break;
 
       case 10:
         toggleLEDblink = !toggleLEDblink;
         LEDtimerInput = commandArg;
+
+        reception_confirm = 1;
       break; 
 
       case 11:
         ledIntensity = (int)(commandArg / 100.0f * 255.0f);
+
+        reception_confirm = 1;
       break;
 
       case 12:
         toggleLongPacket = !toggleLongPacket;
+
+        reception_confirm = 1;
+      break;
+
+      case 13:
+        currentStepperAngle = 0;
+
+        reception_confirm = 1;
+      break;
+
+      case 14:
+        speed = (int) commandArg;
+
+        reception_confirm = 1;
+      break;
+
+      case 15:
+        toggle_yaw_stabilization = !toggle_yaw_stabilization;
+
+        reception_confirm = 1;
+      break;
+
+      case 16:
+        toggleFlightMode = !toggleFlightMode;
+
+        reception_confirm = 1;
       break;
 
       default:
+        reception_confirm = 0;
       break;
 
     }
@@ -523,4 +666,193 @@ void LEDhandler(){
   }
 
 
+}
+
+void stepperSetup(){
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(RESET_PIN, OUTPUT);
+  pinMode(SLEEP_PIN, OUTPUT);
+  pinMode(FAULT_PIN, INPUT);
+
+  pinMode(M0_PIN, OUTPUT);
+  pinMode(M1_PIN, OUTPUT);
+  pinMode(M2_PIN, OUTPUT);
+
+  // pinMode(LED_PIN, OUTPUT);
+
+
+  //Disables sleep and reset
+  digitalWrite(RESET_PIN, HIGH);
+  digitalWrite(SLEEP_PIN, HIGH);
+
+  stepper.begin();
+  stepper.setSpeed(speed);
+
+  //Motor starts low
+  digitalWrite(DIR_PIN, LOW);
+  digitalWrite(STEP_PIN, LOW);
+
+  if (set_substep(step_division)) {
+    // Serial.println("Invalid Step Division");
+    // Serial.flush();
+    // exit(-4);
+    // while(1);
+  }
+
+  stepper.step(0,200);
+}
+
+void stepperHandler(){
+  // if (!digitalRead(FAULT_PIN)) {
+  //   // Serial.println("Fault pin low: error. Exiting...");
+  //   // Serial.flush();
+  //   exit(4);
+  // }
+
+
+
+  if (!steps_left) {step_lock = false; }
+  //Else, turn 
+  else {
+    Serial.println(steps_left);
+    stepper.step(curr_dir, steps_left);
+    total_steps+= steps_left;
+    steps_left = 0;
+  }
+
+ 
+  if ( toggle_yaw_stabilization && !step_lock){
+    stabilize_yaw();
+  }
+}
+
+int set_dir(bool dir) {
+  digitalWrite(DIR_PIN, dir);
+  curr_dir = dir;
+  return 0;
+}
+
+int turn_steps(double steps) {
+  //Serial.print("Steps: "); Serial.println(steps);
+  if (steps == 0) {return 0;}
+
+  //Allows the user to rotate even when stabilizing (Changing the target angle)    //TODO What to do for partial steps?
+  if (toggle_yaw_stabilization) {
+    
+    //Motor Direction and User rotation in same direction 
+    if ( (steps < 0 && curr_dir == CCW)   ||   (steps>0 && curr_dir == CW) ){
+      steps_left += abs(steps);
+    }
+    //In different direction
+    else {
+      steps_left = abs(steps) - steps_left;
+      set_dir(!curr_dir);
+    }
+
+    return 0;
+  }
+
+  //Ignore command if motor already turning
+  if (step_lock) {return -1;}
+
+   //Select direction based on sign
+  bool dir = (steps>0) ? CW : CCW;
+  set_dir(dir);
+  // Serial.print("Steps is: "); Serial.print(steps); Serial.print(" so dir is: "); Serial.println(dir);
+
+  //Update the accumulated error.
+  partial_steps += steps - (int)steps;
+
+  //The accumulated error reached 1 or -1. Add it to the steps to do
+  if (abs(partial_steps) >= 1) {
+    steps += (int)partial_steps;
+    partial_steps -= (int)partial_steps;
+  }
+  //Select direction based on sign (again)
+  dir = (steps>0) ? CW : CCW;
+  set_dir(dir);
+
+  steps_left = abs( (int)steps );
+  step_lock = true;
+  return 0;
+}
+
+//Turn by X.x degrees. Positive is CW, Negative is CCW
+int turn_degrees(double degrees) {
+  double steps = (degrees / 360) * STEPS_PER_REV*step_division;
+  return turn_steps(steps);
+}
+
+int set_abs_angle(double angle){
+  double diff = (angle - currentStepperAngle); //consider taking modulo
+  double steps = (diff / 360) * STEPS_PER_REV* (double) step_division;
+  currentStepperAngle = angle;
+  //Serial.println(steps);
+  return turn_steps(steps);
+}
+
+//Go to previous or next LED 
+int turn_led(bool dir) {
+  double steps = (STEPS_PER_REV*step_division / NUM_LEDS);
+  if (dir == CCW) steps *= -1;
+
+  return turn_steps(steps);
+}
+
+int stabilize_yaw(){ 
+  double delta_angle =  last_payload_yaw - payload_yaw;
+  last_payload_yaw = payload_yaw;
+  Serial.print("Stabilizing: "); Serial.println(delta_angle);
+  turn_degrees(delta_angle);
+
+  return 0; 
+}
+
+int set_substep(int division){
+
+  bool M0 = 0;
+  bool M1 = 0;
+  bool M2 = 0;
+
+  switch(division) {
+    case 1:
+      M0 = 0;
+      M1 = 0;
+      M2 = 0;
+      break;
+    case 2:
+      M0 = 1;
+      M1 = 0;
+      M2 = 0;
+      break;
+    case 4:
+      M0 = 0;
+      M1 = 1;
+      M2 = 0;
+      break;
+    case 16:
+      M0 = 1;
+      M1 = 1;
+      M2 = 0;
+      break;
+    case 32:
+      M0 = 0;
+      M1 = 0;
+      M2 = 1;
+      break;
+    case 64:
+      M0 = 1;
+      M1 = 1;
+      M2 = 1;
+      break;
+    default:
+      return -4;
+  }
+
+  digitalWrite(M0_PIN, M0);
+  digitalWrite(M1_PIN, M1);
+  digitalWrite(M2_PIN, M2);
+
+  return 0;
 }
