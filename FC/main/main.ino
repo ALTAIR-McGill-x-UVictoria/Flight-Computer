@@ -47,6 +47,7 @@ float voltage;
 //Radio loop timer (fastest transmission speed)
 #define LOOP_TIMER 500
 #define FLIGHT_MODE_TIMER 200
+#define FLIGHT_MODE_COUNT 5
 
 #define ENABLE_SERIAL 0  //Enable Serial port
 
@@ -139,7 +140,7 @@ int toggleLongPacket = 0;
 int toggleFlightMode = 0;
 int transmissionCounter = 0;
 int timeout = 1000;
-int flightModeCount = 5;
+int flightModeCount = FLIGHT_MODE_COUNT;
 
 //Stepper motor variables
 float angleToSet = 0;
@@ -215,8 +216,14 @@ void loop() {
 
   payload_yaw = stAngles.fYaw;
 
+  // char fullpacket[100];
+  String shortpacket = "";
+  // strcpy(fullpacket, formRadioPacket(1));
+  shortpacket = shortpacket + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
+
+
   if (enableSDWrite == 1) {
-    SDWrite(formRadioPacket(1));
+    SDWrite(logger());
   }
 
   if (RX_ENABLE) {
@@ -224,6 +231,7 @@ void loop() {
     if (toggleFlightMode == 0) {
 
       if (sendTimer >= LOOP_TIMER) {
+
         radioTx(formRadioPacket(toggleLongPacket));
 
         sendTimer = 0;
@@ -236,8 +244,11 @@ void loop() {
         radioTx(formRadioPacket(toggleLongPacket));
 
         sendTimer = 0;
+
       }
     }
+
+    
   }
 
   if (LED_ENABLE) {
@@ -294,7 +305,7 @@ void radioSetup() {
 
 void radioTx(char radiopacket[100]) {
 
-  rf95.send((uint8_t*)radiopacket, 100);
+  rf95.send((uint8_t*)radiopacket, toggleLongPacket ? 90 : 25);
   rf95.waitPacketSent();
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
@@ -447,16 +458,16 @@ void SDWrite(String log) {
   }
 }
 
+String logger(){
+  String log = "";
+  log = log + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+}
+
 char* formRadioPacket(bool enable_long) {  //includes DAQ
   String packet = "";
   if (enable_long == 1) {
 
-
-    // imuDataGet( &stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-    // pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-    // payload_yaw = stAngles.fYaw;
-
-    packet = packet + CALLSIGN + ":" + reception_confirm + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + rf95.lastRssi() + "," + rf95.lastSNR();
+    packet = packet + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
 
     reception_confirm = 0;
 
@@ -464,9 +475,10 @@ char* formRadioPacket(bool enable_long) {  //includes DAQ
   }
 
   //default small packet
-  packet = packet + CALLSIGN + ":" + reception_confirm + "," + battery_voltage() + "," + rf95.lastRssi() + "," + rf95.lastSNR();
+  packet = packet + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
 
   reception_confirm = 0;
+
 
   return packet.c_str();
 }
@@ -499,6 +511,7 @@ void FCpacketParser(char* packet) {
       //ping
       // Serial.println("              pong");
       reception_confirm = 1;
+      
       break;
 
     case 2:
@@ -630,6 +643,11 @@ void FCpacketParser(char* packet) {
       timeout = commandArg;
 
       reception_confirm = 1;
+      break;
+
+    case 18:
+      reception_confirm = 1;
+      reboot();
       break;
 
     default:
@@ -863,4 +881,8 @@ int set_substep(int division) {
   digitalWrite(M2_PIN, M2);
 
   return 0;
+}
+
+void reboot() {
+  SCB_AIRCR = 0x05FA0004;
 }
