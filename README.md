@@ -1,27 +1,35 @@
 Flight-Computer
 
-Radio Packet Format:
-
-TODO
-
-Radio Commands:
+FC Radio Commands (ascending by code number):
 
 0. none
 1. ping: pong
-2. led1 [value]: LED #1 on at [value]
-3. led2 [value]: LED #2 on at [value]
-4. led3 [value]: LED #3 on at [value]
-5. ledoff: LED off
-7. dangle [angle]: set angle of driver
-8. sdwrite: Start DAQ write to SD
-9. sdstop: Stop DAQ write to SD
-10. sdclear: Delete the all current data written on SD
-11. ledblink [time]: Enable LED blinking at [time] ms intervals
-12. ledbright [value]: Set the brightness of the LEDs
-13. togglelong: Toggle the full flight computer packet transmission
+2. led1 [value]: Toggle LED #1 
+3. led2 [value]: Toggle LED #2
+4. led3 [value]: Toggle LED #3
+5. ledoff: All LEDs OFF
+6. dangle [angle]: set angle of driver (relative to last zero angle)
+7. sdwrite: Start DAQ write to SD
+8. sdstop: Stop DAQ write to SD
+9. sdclear: Delete the all current data written on SD
+10. ledblink [time]: Enable LED blinking at [time] ms intervals
+11. ledbright [value]: Set the brightness of the LEDs
+12. togglelong: Toggle the full flight computer packet transmission
+13. zeromotor: Sets the current motor angle as zero degrees
+14. stepperspeed [value]: Sets the motor step speed (default 2000)
+15. togglestab: Toggles inertial stabilization from IMU angle
+16. toggleflightmode: Toggles telemetry flight mode (1 Rx/5 Tx vs. 1 Rx/Tx)
+17. setradiotimeout [time]: Sets FC radio 'wait' timer (default 1000 ms)
+18. resetfc: Flight Computer soft reset
+
+Local Ground Station Commands:
+
+- toggleparsing: Toggles parsing of flight computer packet in serial monitor
+- clearq: Clears the current command queue
 
 
-Code definitions:
+
+Code definitions (non exhaustive):
 At the top of the code file (.ino), there are definitions for pins and functionalities. Listed here are the ones which can be changed. 
 
 - CALLSIGN: the current operator's callsign (can keep Ben's advanced license callsign)
