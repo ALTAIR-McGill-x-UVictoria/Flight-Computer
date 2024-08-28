@@ -261,15 +261,19 @@ void loop() {
 }
 
 
+
+
+/*
+=========================
+Function definitions'
+=========================
+*/
+
+
+
 void radioSetup() {
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
-
-  // Serial.begin(115200);
-  // while (!Serial) delay(1);
-  // delay(100);
-
-  // Serial.println("Feather LoRa TX Test!");
 
   // manual reset
   digitalWrite(RFM95_RST, LOW);
@@ -279,7 +283,6 @@ void radioSetup() {
 
   while (!rf95.init()) {
     Serial.println("LoRa radio init failed");
-    // Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
     while (1)
       ;
   }
