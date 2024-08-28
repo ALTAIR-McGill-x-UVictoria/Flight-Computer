@@ -509,49 +509,24 @@ void FCpacketParser(char* packet) {
 
     case 1:
       //ping
-      // Serial.println("              pong");
       reception_confirm = 1;
       
       break;
 
     case 2:
-      //ledon1
-      // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-      // if(ledIntensity == 0){
-      //   led1Status = 0;
-      // } else{
-      //   led1Status = 1;
-      // }
       led1Status = !led1Status;
-      // Serial.print("LED ON at "); Serial.println(ledIntensity);
       reception_confirm = 1;
 
       break;
 
     case 3:
-      //ledon1
-      // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-      // if(ledIntensity == 0){
-      //   led2Status = 0;
-      // } else{
-      //   led2Status = 1;
-      // }
       led2Status = !led2Status;
-      // Serial.print("LED ON at "); Serial.println(ledIntensity);
       reception_confirm = 1;
 
       break;
 
     case 4:
-      //ledon
-      // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-      // if(ledIntensity == 0){
-      //   led3Status = 0;
-      // } else{
-      //   led3Status = 1;
-      // }
       led3Status = !led3Status;
-      // Serial.print("LED ON at "); Serial.println(ledIntensity);
       reception_confirm = 1;
 
       break;
@@ -561,8 +536,6 @@ void FCpacketParser(char* packet) {
       led1Status = 0;
       led2Status = 0;
       led3Status = 0;
-      // ledIntensity = (int)(commandArg / 100.0f * 255.0f);
-      // Serial.println("LED OFF");
       reception_confirm = 1;
 
       break;
