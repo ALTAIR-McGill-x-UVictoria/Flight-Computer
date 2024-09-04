@@ -14,9 +14,9 @@
 #define CALLSIGN "VA2ETD"
 
 //Radio pin definitions
-#define RFM95_RST 37  //5
+#define RFM95_RST 20  //5
 #define RFM95_CS 10
-#define RFM95_INT 36  //4
+#define RFM95_INT 21  //4
 
 //LoRa parameters definitions
 #define RF95_FREQ 433.0
@@ -31,8 +31,8 @@
 
 //Battery voltage definitions
 #define ANALOG_IN_PIN 23
-float R2 = 3730;
-float R1 = 10010;
+float R2 = 3520;
+float R1 = 10000;
 float voltage;
 
 //Functionality enable definitions
@@ -40,7 +40,8 @@ float voltage;
 #define DAQ_ENABLE 1
 #define SD_ENABLE 0
 #define LED_ENABLE 0
-#define STEPPER_ENABLE 1
+#define STEPPER_ENABLE 0
+#define ACTUATOR_ENABLE 0
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
 
@@ -139,7 +140,7 @@ char* packetForm;
 int toggleLongPacket = 0;
 int toggleFlightMode = 0;
 int transmissionCounter = 0;
-int timeout = 1000;
+int timeout = 1500;
 int flightModeCount = FLIGHT_MODE_COUNT;
 
 //Stepper motor variables
@@ -158,6 +159,9 @@ float last_payload_yaw = 0;
 bool toggle_yaw_stabilization = false;
 
 double currentStepperAngle = 0;
+
+bool actuatorStatus = 0;
+#define ACTUATOR_PIN 7;
 
 #define LED_PIN 13
 bool led_state = false;
@@ -189,6 +193,8 @@ void setup() {
   pinMode(PWM_LED3, OUTPUT);
 #endif
 
+
+
   // pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
 
 #if SD_ENABLE
@@ -202,6 +208,11 @@ void setup() {
 #if STEPPER_ENABLE
   stepperSetup();
 #endif
+
+#if ACTUATOR_ENABLE
+  pinMode(ACTUATOR_PIN, OUTPUT);
+#endif
+
 }
 
 void loop() {
@@ -221,12 +232,13 @@ void loop() {
   // strcpy(fullpacket, formRadioPacket(1));
   shortpacket = shortpacket + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
 
-
+  #if SD_ENABLE
   if (enableSDWrite == 1) {
     SDWrite(logger());
   }
+  #endif
 
-  if (RX_ENABLE) {
+  #if RX_ENABLE
 
     if (toggleFlightMode == 0) {
 
@@ -249,15 +261,20 @@ void loop() {
     }
 
     
-  }
+  #endif
 
-  if (LED_ENABLE) {
+  #if LED_ENABLE
     LEDhandler();
-  }
+  #endif
 
-  if (STEPPER_ENABLE) {
+  #if ACTUATOR_ENABLE
+    actuatorHandler();
+  #endif
+  
+
+  #if STEPPER_ENABLE
     stepperHandler();
-  }
+  #endif
 }
 
 
@@ -265,7 +282,7 @@ void loop() {
 
 /*
 =========================
-Function definitions'
+Function definitions
 =========================
 */
 
@@ -309,7 +326,9 @@ void radioSetup() {
 void radioTx(char radiopacket[100]) {
 
   rf95.send((uint8_t*)radiopacket, toggleLongPacket ? 90 : 25);
+
   rf95.waitPacketSent();
+
   uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
   uint8_t len = sizeof(buf);
 
@@ -626,6 +645,14 @@ void FCpacketParser(char* packet) {
       reboot();
       break;
 
+    case 19:
+      actuatorStatus = 1;
+      break;
+
+    case 20:
+      actuatorStatus = 0;
+      break;
+
     default:
       reception_confirm = 0;
       break;
@@ -667,6 +694,10 @@ void LEDhandler() {
     analogWrite(PWM_LED2, ledIntensity * led2Status);
     analogWrite(PWM_LED3, ledIntensity * led3Status);
   }
+}
+
+void actuatorHandler(){
+  digitalWrite(ACTUATOR_PIN, actuatorStatus == 1 ? HIGH : LOW);
 }
 
 void stepperSetup() {
