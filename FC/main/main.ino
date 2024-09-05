@@ -122,6 +122,8 @@ float floatArg = 0.0;
 String commandPacket;
 
 volatile int reception_confirm = 0;
+volatile int32_t commandid = 0;
+volatile int32_t recvdCommandid = 0;
 
 volatile int led1Status = 0;
 volatile int led2Status = 0;
@@ -161,7 +163,7 @@ bool toggle_yaw_stabilization = false;
 double currentStepperAngle = 0;
 
 bool actuatorStatus = 0;
-#define ACTUATOR_PIN 7;
+#define ACTUATOR_PIN 7
 
 #define LED_PIN 13
 bool led_state = false;
@@ -230,7 +232,10 @@ void loop() {
   // char fullpacket[100];
   String shortpacket = "";
   // strcpy(fullpacket, formRadioPacket(1));
-  shortpacket = shortpacket + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
+  commandid = millis()
+
+
+  shortpacket = shortpacket + String(commandid) + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
 
   #if SD_ENABLE
   if (enableSDWrite == 1) {
@@ -525,6 +530,11 @@ void FCpacketParser(char* packet) {
 
   if (NULL != strtokIndx) {
     commandArg = atof(strtokIndx);  // convert this part to an integer
+  }
+
+  if(commandid != recvdCommandid){
+    reception_confirm = 0;
+    return;
   }
 
   switch (commandCode) {
