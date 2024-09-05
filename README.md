@@ -21,6 +21,8 @@ FC Radio Commands (ascending by code number):
 16. toggleflightmode: Toggles telemetry flight mode (1 Rx/5 Tx vs. 1 Rx/Tx)
 17. setradiotimeout [time]: Sets FC radio 'wait' timer (default 1000 ms)
 18. resetfc: Flight Computer soft reset
+20. terminate: Energize linear actuator termination circuit
+21. resetactuator: De-energize linear actuator termination circuit
 
 Local Ground Station Commands:
 
