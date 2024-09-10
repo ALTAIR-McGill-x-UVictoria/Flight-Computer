@@ -30,7 +30,9 @@
 #define PWM_LED3 29
 
 //Battery voltage definitions
-#define ANALOG_IN_PIN 23
+#define MAIN_BATTERY_PIN 23
+#define MOTOR_BATTERY_PIN 30
+#define HEATING_BATTERY_PIN 31
 float R2 = 3520;
 float R1 = 10000;
 float voltage;
@@ -38,10 +40,11 @@ float voltage;
 //Functionality enable definitions
 #define RX_ENABLE 1
 #define DAQ_ENABLE 1
-#define SD_ENABLE 0
+#define SD_ENABLE 1
 #define LED_ENABLE 0
 #define STEPPER_ENABLE 0
-#define ACTUATOR_ENABLE 0
+#define ACTUATOR_ENABLE 1
+#define HEATING_ENABLE 1
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
 
@@ -108,6 +111,7 @@ Bonezegei_DRV8825 stepper(DIR_PIN, STEP_PIN);
 
 
 volatile bool enableSDWrite = 0;
+String currentFilePath = "datalog_0.txt";
 
 //Command parser variables
 const byte numChars = 32;
@@ -122,8 +126,8 @@ float floatArg = 0.0;
 String commandPacket;
 
 volatile int reception_confirm = 0;
-volatile int32_t commandid = 0;
-volatile int32_t recvdCommandid = 0;
+String commandid = 0;
+String recvdCommandid = 0;
 
 volatile int led1Status = 0;
 volatile int led2Status = 0;
@@ -163,7 +167,9 @@ bool toggle_yaw_stabilization = false;
 double currentStepperAngle = 0;
 
 bool actuatorStatus = 0;
-#define ACTUATOR_PIN 7
+#define ACTUATOR_PIN 8
+bool heatingStatus = 0;
+#define HEATING_PIN 39
 
 #define LED_PIN 13
 bool led_state = false;
@@ -187,6 +193,7 @@ void setup() {
 
 #if SD_ENABLE
   SDSetup();
+  // SDNewFile();
 #endif
 
 #if LED_ENABLE
@@ -195,6 +202,7 @@ void setup() {
   pinMode(PWM_LED3, OUTPUT);
 #endif
 
+  pinMode(7,OUTPUT);
 
 
   // pinMode(ANALOG_IN_PIN, INPUT); //voltage sensor
@@ -215,6 +223,10 @@ void setup() {
   pinMode(ACTUATOR_PIN, OUTPUT);
 #endif
 
+#if HEATING_ENABLE
+  pinMode(HEATING_PIN, OUTPUT);
+#endif
+
 }
 
 void loop() {
@@ -229,13 +241,6 @@ void loop() {
 
   payload_yaw = stAngles.fYaw;
 
-  // char fullpacket[100];
-  String shortpacket = "";
-  // strcpy(fullpacket, formRadioPacket(1));
-  commandid = millis()
-
-
-  shortpacket = shortpacket + String(commandid) + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
 
   #if SD_ENABLE
   if (enableSDWrite == 1) {
@@ -244,12 +249,13 @@ void loop() {
   #endif
 
   #if RX_ENABLE
+    commandid = String(rand()).substring(0,4);
 
     if (toggleFlightMode == 0) {
 
       if (sendTimer >= LOOP_TIMER) {
-
-        radioTx(formRadioPacket(toggleLongPacket));
+        
+        radioTx(formRadioPacket(toggleLongPacket, commandid));
 
         sendTimer = 0;
       }
@@ -258,7 +264,7 @@ void loop() {
 
       if (sendTimer >= FLIGHT_MODE_TIMER) {
 
-        radioTx(formRadioPacket(toggleLongPacket));
+        radioTx(formRadioPacket(toggleLongPacket, commandid));
 
         sendTimer = 0;
 
@@ -270,12 +276,18 @@ void loop() {
 
   #if LED_ENABLE
     LEDhandler();
+
+    //dont forget to remove
+    
   #endif
 
   #if ACTUATOR_ENABLE
     actuatorHandler();
   #endif
   
+  #if HEATING_ENABLE
+    heatingHandler();
+  #endif
 
   #if STEPPER_ENABLE
     stepperHandler();
@@ -329,8 +341,8 @@ void radioSetup() {
 }
 
 void radioTx(char radiopacket[100]) {
-
-  rf95.send((uint8_t*)radiopacket, toggleLongPacket ? 90 : 25);
+  
+  rf95.send((uint8_t*)radiopacket, toggleLongPacket ? 90 : 20);
 
   rf95.waitPacketSent();
 
@@ -460,11 +472,17 @@ void SDSetup() {
       // No SD card, so don't do anything more - stay stuck here
     }
   }
+
   // Serial.println("Card initialized.");
+  int i = 0;
+  while(SD.exists(("datalog_" + String(i) + ".txt").c_str())){
+    i++;
+  }
+  currentFilePath = "datalog_" + String(i) + ".txt";
 }
 
 void SDWrite(String log) {
-  File dataFile = SD.open("datalog.txt", FILE_WRITE);
+  File dataFile = SD.open(currentFilePath.c_str(), FILE_WRITE);
 
   // if the file is available, write to it:
   if (dataFile) {
@@ -485,16 +503,36 @@ void SDWrite(String log) {
   }
 }
 
-String logger(){
-  String log = "";
-  log = log + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+void SDNewFile(){
+  int i = 0;
+  String loghead = "datalog_";
+  while(SD.exists((loghead + String(i) + ".txt").c_str())){
+    i++;
+  }
+  currentFilePath = loghead + String(i++) + ".txt";
+
 }
 
-char* formRadioPacket(bool enable_long) {  //includes DAQ
+String logger(){
+  String log = "";
+  log = log + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+  return log;
+}
+
+char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
+
+  //FOR FUTURE, FORM AS STRUCT AND TRANSMIT WITHOUT COMMAS 
+
   String packet = "";
+  
+  digitalWrite(7,reception_confirm == 1 ? HIGH : LOW);
+  
   if (enable_long == 1) {
 
-    packet = packet + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage() + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+    packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + ","
+    + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + ","
+    + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + heatingStatus + "," + actuatorStatus + "," 
+    + battery_voltage("motor") + "," + battery_voltage("heating");
 
     reception_confirm = 0;
 
@@ -502,7 +540,7 @@ char* formRadioPacket(bool enable_long) {  //includes DAQ
   }
 
   //default small packet
-  packet = packet + CALLSIGN + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage();
+  packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main");
 
   reception_confirm = 0;
 
@@ -518,8 +556,15 @@ void FCpacketParser(char* packet) {
   // char * temp;
   // strcpy(temp,packet);
 
+  
 
   strtokIndx = strtok(packet, ":");
+
+  if(NULL != strtokIndx)
+  {
+    recvdCommandid = strtokIndx;
+  }
+
   strtokIndx = strtok(NULL, ",");  // get the first part - the string
   // Serial.print(strtokIndx); Serial.print("-"); Serial.println(strtokIndx != NULL);
   if (NULL != strtokIndx) {
@@ -532,6 +577,8 @@ void FCpacketParser(char* packet) {
     commandArg = atof(strtokIndx);  // convert this part to an integer
   }
 
+  // Serial.print("IDs:"); Serial.print(commandid); Serial.print(","); Serial.println(recvdCommandid);
+
   if(commandid != recvdCommandid){
     reception_confirm = 0;
     return;
@@ -541,6 +588,7 @@ void FCpacketParser(char* packet) {
 
     case 1:
       //ping
+      // digitalWrite(7,HIGH);
       reception_confirm = 1;
       
       break;
@@ -657,11 +705,24 @@ void FCpacketParser(char* packet) {
 
     case 19:
       actuatorStatus = 1;
+      reception_confirm = 1;
       break;
 
     case 20:
       actuatorStatus = 0;
+      reception_confirm = 1;
       break;
+
+    case 21:
+      SDNewFile();
+      reception_confirm = 1;
+      break;
+
+    case 22:
+      heatingStatus = 0;
+      reception_confirm = 1;
+      break;
+
 
     default:
       reception_confirm = 0;
@@ -669,12 +730,19 @@ void FCpacketParser(char* packet) {
   }
 }
 
-float battery_voltage() {
-  int adcValue = analogRead(ANALOG_IN_PIN);
+float battery_voltage(String battery_select) {
   float resistorRatio = R2 / (R2 + R1);
   float conversionFactor = 3.3 / (1024 * resistorRatio);
-  float voltage = (float)(adcValue * conversionFactor);
-  return voltage;
+
+  float mainVoltage = (float)(analogRead(MAIN_BATTERY_PIN) * conversionFactor);
+  float motorVoltage = (float)(analogRead(MOTOR_BATTERY_PIN) * conversionFactor);
+  float heatingVoltage = (float)(analogRead(HEATING_BATTERY_PIN) * conversionFactor);
+
+  if (battery_select == "main"){return mainVoltage;}
+  else if(battery_select == "motor"){return motorVoltage;}
+  else if(battery_select == "heating"){return heatingVoltage;}
+  else{return 0.0;}
+  
 }
 
 void LEDhandler() {
@@ -767,6 +835,11 @@ void stepperHandler() {
   if (toggle_yaw_stabilization && !step_lock) {
     stabilize_yaw();
   }
+}
+
+void heatingHandler(){
+  heatingStatus = (float)s32TemperatureVal/100 < 15.0 ? 1 : 0;
+  digitalWrite(HEATING_PIN, heatingStatus);
 }
 
 int set_dir(bool dir) {
