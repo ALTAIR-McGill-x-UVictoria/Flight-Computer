@@ -42,7 +42,7 @@ float voltage;
 #define DAQ_ENABLE 1
 #define SD_ENABLE 1
 #define LED_ENABLE 0
-#define STEPPER_ENABLE 0
+#define STEPPER_ENABLE 1
 #define ACTUATOR_ENABLE 1
 #define HEATING_ENABLE 1
 #define DAQ_DEBUG 0
@@ -57,26 +57,26 @@ float voltage;
 
 //Stepper motor definitions
 //TO CHANGE
-// #define DIR_PIN 39
-// #define STEP_PIN 38
+#define DIR_PIN 39
+#define STEP_PIN 38
 // // #define SLEEP_PIN 4 //set to 3.3
 // // #define RESET_PIN 5 //set to 3.3
-// #define FAULT_PIN 40
+#define FAULT_PIN 40
 
-// #define M0_PIN 33
-// #define M1_PIN 34
-// #define M2_PIN 35
+ #define M0_PIN 33
+ #define M1_PIN 34
+ #define M2_PIN 35
 
 
-#define DIR_PIN 2
-#define STEP_PIN 3
-#define SLEEP_PIN 4
-#define RESET_PIN 5
-#define FAULT_PIN 6
+//#define DIR_PIN 2
+//#define STEP_PIN 3
+//#define SLEEP_PIN 4
+//#define RESET_PIN 5
+//#define FAULT_PIN 6
 
-#define M0_PIN 7
-#define M1_PIN 8
-#define M2_PIN 9
+//#define M0_PIN 7
+//#define M1_PIN 8
+//#define M2_PIN 9
 
 #define STEPS_PER_REV 200
 
@@ -781,8 +781,8 @@ void actuatorHandler(){
 void stepperSetup() {
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
-  pinMode(RESET_PIN, OUTPUT);
-  pinMode(SLEEP_PIN, OUTPUT);
+  //pinMode(RESET_PIN, OUTPUT);
+  //pinMode(SLEEP_PIN, OUTPUT);
   pinMode(FAULT_PIN, INPUT);
 
   pinMode(M0_PIN, OUTPUT);
@@ -793,8 +793,8 @@ void stepperSetup() {
 
 
   //Disables sleep and reset
-  digitalWrite(RESET_PIN, HIGH);
-  digitalWrite(SLEEP_PIN, HIGH);
+  //digitalWrite(RESET_PIN, HIGH);
+  //digitalWrite(SLEEP_PIN, HIGH);
 
   stepper.begin();
   stepper.setSpeed(speed);
