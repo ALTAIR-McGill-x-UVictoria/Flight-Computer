@@ -25,14 +25,16 @@
 #define TX_POWER 20
 
 //LED pin definitions
-#define PWM_LED1 24
-#define PWM_LED2 28
-#define PWM_LED3 29
+#define PWM_LED1 14
+#define PWM_LED2 2
+#define PWM_LED3 15
 
 //Battery voltage definitions
 #define MAIN_BATTERY_PIN 23
-#define MOTOR_BATTERY_PIN 30
-#define HEATING_BATTERY_PIN 31
+#define MOTOR_BATTERY_PIN 25
+#define HEATING_BATTERY_PIN 22
+float RH2 = 10000;
+float RH1 = 2800;
 float R2 = 3520;
 float R1 = 10000;
 float voltage;
@@ -41,7 +43,7 @@ float voltage;
 #define RX_ENABLE 1
 #define DAQ_ENABLE 1
 #define SD_ENABLE 1
-#define LED_ENABLE 0
+#define LED_ENABLE 1
 #define STEPPER_ENABLE 0
 #define ACTUATOR_ENABLE 1
 #define HEATING_ENABLE 1
@@ -57,15 +59,15 @@ float voltage;
 
 //Stepper motor definitions
 //TO CHANGE
-// #define DIR_PIN 39
-// #define STEP_PIN 38
+#define DIR_PIN 39
+#define STEP_PIN 38
 // // #define SLEEP_PIN 4 //set to 3.3
 // // #define RESET_PIN 5 //set to 3.3
-// #define FAULT_PIN 40
+#define FAULT_PIN 40
 
-// #define M0_PIN 33
-// #define M1_PIN 34
-// #define M2_PIN 35
+#define M0_PIN 33
+#define M1_PIN 34
+#define M2_PIN 35
 
 
 #define DIR_PIN 2
@@ -515,7 +517,7 @@ void SDNewFile(){
 
 String logger(){
   String log = "";
-  log = log + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+  log = log + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + battery_voltage("motor") + "," + battery_voltage("main")+ stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
   return log;
 }
 
@@ -540,8 +542,11 @@ char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
   }
 
   //default small packet
+  
+ 
   packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main");
 
+  
   reception_confirm = 0;
 
 
@@ -731,7 +736,16 @@ void FCpacketParser(char* packet) {
 }
 
 float battery_voltage(String battery_select) {
-  float resistorRatio = R2 / (R2 + R1);
+  
+  float resistorRatio = 0;
+
+  if (battery_select == "main" || battery_select == "heating"){
+    resistorRatio = R2 / (R2 + R1);
+  }
+  else if(battery_select == "heating"){
+    resistorRatio = RH2 / (RH2 + RH1);
+  }
+
   float conversionFactor = 3.3 / (1024 * resistorRatio);
 
   float mainVoltage = (float)(analogRead(MAIN_BATTERY_PIN) * conversionFactor);
