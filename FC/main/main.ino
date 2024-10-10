@@ -43,8 +43,8 @@ float voltage;
 #define SD_ENABLE 1
 #define LED_ENABLE 0
 #define STEPPER_ENABLE 0
-#define ACTUATOR_ENABLE 1
-#define HEATING_ENABLE 1
+#define ACTUATOR_ENABLE 0
+#define HEATING_ENABLE 0
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
 
