@@ -1,5 +1,7 @@
 Flight-Computer
 
+(OUDATED)
+
 FC Radio Commands (ascending by code number):
 
 0. none
