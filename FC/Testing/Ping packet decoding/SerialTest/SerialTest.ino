@@ -14,7 +14,7 @@ void setup() {
   PingSerial.begin(PingBaud);
   // while (!PingSerial && (millis() < 3000));
 
-  crcinit();
+  // crcinit();
 
   Serial.println("Setup complete");
   // uart_init(56700);
@@ -33,11 +33,11 @@ void loop() {
       incomingByte = PingSerial.read();
       // Serial.print("USB received: ");
       String hex = String(incomingByte, HEX);
-      int i = crcCompute(hex.c_str(), 1);
+      // int i = crcCompute(hex.c_str(), 1);
       // hex.toUpperCase();
       // int ascii = hex_to_ascii(hex[0], hex[1]);
-      String hexout = String(i, HEX);
-      Serial.print(hexout + "-");
+      // String hexout = String(i, HEX);
+      Serial.print(hex + "-");
       // Serial.print(String(i) + "-");
       // HWSERIAL.print("USB received:");
       // HWSERIAL.println(incomingByte, DEC);
