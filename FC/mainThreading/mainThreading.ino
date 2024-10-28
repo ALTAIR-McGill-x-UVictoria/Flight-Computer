@@ -235,11 +235,6 @@ void setup() {
 
 void loop() {
 
-  if (DAQ_DEBUG) {
-    fullSensorLoop();
-  }
-  
-
   payload_yaw = stAngles.fYaw;
 
 
@@ -398,51 +393,6 @@ void sensorSetup() {
   delay(200);
 }
 
-void fullSensorLoop() {
-
-  imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-  pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-
-  Serial.println();
-  Serial.println("/-------------------------------------------------------------/");
-  Serial.print("Roll : ");
-  Serial.print(stAngles.fRoll);
-  Serial.print("    Pitch : ");
-  Serial.print(stAngles.fPitch);
-  Serial.print("    Yaw : ");
-  Serial.print(stAngles.fYaw);
-  Serial.println();
-  Serial.print("Acceleration: X : ");
-  Serial.print(stAccelRawData.s16X);
-  Serial.print("    Acceleration: Y : ");
-  Serial.print(stAccelRawData.s16Y);
-  Serial.print("    Acceleration: Z : ");
-  Serial.print(stAccelRawData.s16Z);
-  Serial.println();
-  Serial.print("Gyroscope: X : ");
-  Serial.print(stGyroRawData.s16X);
-  Serial.print("       Gyroscope: Y : ");
-  Serial.print(stGyroRawData.s16Y);
-  Serial.print("       Gyroscope: Z : ");
-  Serial.print(stGyroRawData.s16Z);
-  Serial.println();
-  Serial.print("Magnetic: X : ");
-  Serial.print(stMagnRawData.s16X);
-  Serial.print("      Magnetic: Y : ");
-  Serial.print(stMagnRawData.s16Y);
-  Serial.print("      Magnetic: Z : ");
-  Serial.print(stMagnRawData.s16Z);
-  Serial.println();
-  Serial.print("Pressure : ");
-  Serial.print((float)s32PressureVal / 100);
-  Serial.print("     Altitude : ");
-  Serial.print((float)s32AltitudeVal / 100);
-  Serial.println();
-  Serial.print("Temperature : ");
-  Serial.print((float)s32TemperatureVal / 100);
-  Serial.println();
-  // delay(100);
-}
 
 void parseData() {
 
@@ -530,6 +480,7 @@ char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
   
   if (enable_long == 1) {
 
+    //very inefficient, works fine
     packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + ","
     + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + ","
     + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + heatingStatus + "," + actuatorStatus + "," 

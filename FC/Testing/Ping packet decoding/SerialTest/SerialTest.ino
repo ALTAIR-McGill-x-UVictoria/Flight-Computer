@@ -19,6 +19,68 @@ int packetIndex = 0;              // Index to track position in packetBuffer
 bool capturing = false;           // Flag to check if we are capturing a packet
 int foundpacketindex = 0;
 
+// struct definitions
+
+struct OwnshipReport {
+    uint8_t messageID;
+    uint8_t trafficAlertStatus;
+    uint8_t addressType;
+    char participantAddress[7];
+    float latitude;
+    float longitude;
+    int altitude;
+    uint8_t miscellaneousIndicators;
+    uint8_t NIC;
+    uint8_t NACp;
+    uint16_t horizontalVelocity;
+    uint16_t verticalVelocity;
+    uint8_t trackHeading;
+    uint8_t emitterCategory;
+    char flightIdentification[7];
+};
+
+struct GeometricAltitude {
+    uint8_t messageID;
+    int16_t geometricAltitude;
+};
+
+struct GNSSData {
+    uint8_t messageID;
+    uint8_t messageVersion;
+    uint32_t utcTime;
+    float latitude;
+    float longitude;
+    float altitude;
+    float hpl;
+    float vpl;
+    float hfom;
+    float vfom;
+    float hvfom;
+    float vvfom;
+    float gnssVerticalSpeed;
+    float northSouthVelocity;
+    float eastWestVelocity;
+};
+
+struct TransponderStatus {
+    uint8_t messageID;
+    uint8_t messageVersion;
+    bool txEnabled;
+    bool identButtonActive;
+};
+
+struct BarometerSensor {
+    uint8_t messageID;
+    uint8_t sensorType;
+    float barometricPressure;
+    int32_t barometricPressureAltitude;
+    float barometricSensorTemperature;
+};
+
+
+
+OwnshipReport ownshipReport;
+
 void setup() {
   // put your setup code here, to run once:
   while (!Serial && (millis() < 6000));
@@ -47,7 +109,7 @@ void loop() {
 
                 // Copy the detected packet to foundPacket
                 memcpy(foundPacket, packetBuffer, packetIndex);
-                foundpacketindex = packetIndex;
+                // foundpacketindex = packetIndex;
                 // Print the found packet for debugging
                 Serial.print("Detected Packet: ");
                 for (int i = 0; i < packetIndex; i++) {
@@ -55,6 +117,11 @@ void loop() {
                     Serial.print(" ");
                 }
                 Serial.println();
+
+                // parse
+                const char *result = process_packet(foundPacket, packetIndex);
+                Serial.println(result);
+
 
                 // Reset for the next packet
                 packetIndex = 0;
@@ -75,18 +142,16 @@ void loop() {
                 // If packet exceeds buffer size, reset
                 capturing = false;
                 packetIndex = 0;
-            }
-        }
+              }
+          }
+
     }
 
-  for (int i = 0; i <= foundpacketindex; i++){
-    Serial.print(foundPacket[i],HEX);
-  }
-  Serial.println();
+
   
   
 
-  // delay(100);
+  delay(100);
   
 }
 
@@ -132,8 +197,9 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
     uint8_t msg_id = packet[0];
     uint8_t version = packet[1];
 
-    // Example: Handling Heartbeat message (Msg ID = 0x00)
-    if (msg_id == 0x00) {
+    switch (msg_id) {
+      case 0x00:
+        {
         uint8_t gnss_valid = (packet[2] >> 7) & 0x01;
         uint8_t maintenance_req = (packet[2] >> 6) & 0x01;
         uint8_t ident_active = (packet[2] >> 5) & 0x01;
@@ -146,6 +212,16 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
         printf("Device Initialized: %d\n", initialized);
 
         return "Heartbeat message decoded";
+        }
+
+      case 0x0A:
+        {
+        parseOwnshipReport(&ownshipReport, packet, length);
+        Serial.println(ownshipReport.flightIdentification);
+        return "Ownship report";
+        }
+      default:
+        break;
     }
 
     // Add handling for additional message types as needed...
@@ -170,9 +246,9 @@ const char* process_packet(const uint8_t *data, size_t length) {
     uint16_t crc_received = (unescaped_packet[unescaped_len - 2] << 8) | unescaped_packet[unescaped_len - 1];
     uint16_t crc_computed = crc_compute(unescaped_packet, unescaped_len - 2);
 
-    if (crc_computed != crc_received) {
-        return "CRC check failed";
-    }
+    // if (crc_computed != crc_received) {
+    //     return "CRC check failed";
+    // }
 
     // Decode payload
     return decode_packet(unescaped_packet, unescaped_len - 2);
@@ -204,4 +280,89 @@ void printpacket(uint8_t *packet, int length) {
 
     for (uint8_t item: data){Serial.print(item,HEX);};Serial.println();
 }
+
+void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t length) {
+    if (length != 28) {
+        Serial.println("Invalid data length for Ownship Report. Expected 28 bytes.");
+        return;
+    }
+    
+    report->messageID = data[0];
+    report->trafficAlertStatus = (data[1] & 0xF0) >> 4;
+    report->addressType = data[1] & 0x0F;
+    snprintf(report->participantAddress, sizeof(report->participantAddress), "%02X%02X%02X", data[2], data[3], data[4]);
+    report->latitude = (int32_t)((data[5] << 16) | (data[6] << 8) | data[7]) * (180.0 / (1 << 23));
+    report->longitude = (int32_t)((data[8] << 16) | (data[9] << 8) | data[10]) * (180.0 / (1 << 23));
+    report->altitude = (((data[11] << 8) | data[12]) >> 4) * 25 - 1000;
+    report->miscellaneousIndicators = data[12] & 0x0F;
+    report->NIC = (data[13] & 0xF0) >> 4;
+    report->NACp = data[13] & 0x0F;
+    report->horizontalVelocity = (data[14] << 4) | (data[15] >> 4);
+    report->verticalVelocity = ((data[15] & 0x0F) << 8) | data[16];
+    report->trackHeading = data[17];
+    report->emitterCategory = data[18];
+    memcpy(report->flightIdentification, &data[19], 6);
+    report->flightIdentification[6] = '\0';
+}
+
+
+GeometricAltitude parseGeometricAltitude(const uint8_t* data) {
+    GeometricAltitude altitude;
+    altitude.messageID = data[0];
+    altitude.geometricAltitude = ((int16_t)((data[1] << 8) | data[2])) * 5;
+    return altitude;
+}
+
+GNSSData parseGNSSData(const uint8_t* data) {
+    GNSSData gnss;
+    gnss.messageID = data[0];
+    gnss.messageVersion = data[1];
+    gnss.utcTime = (uint32_t)((data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5]);
+    gnss.latitude = (int32_t)((data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9]) / 1e7;
+    gnss.longitude = (int32_t)((data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13]) / 1e7;
+    gnss.altitude = (int32_t)((data[14] << 24) | (data[15] << 16) | (data[16] << 8) | data[17]) / 1e3;
+    gnss.hpl = (uint32_t)((data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21]) / 1e3;
+    gnss.vpl = (uint32_t)((data[22] << 24) | (data[23] << 16) | (data[24] << 8) | data[25]) / 1e2;
+    gnss.hfom = (uint32_t)((data[26] << 24) | (data[27] << 16) | (data[28] << 8) | data[29]) / 1e3;
+    gnss.vfom = (uint16_t)((data[30] << 8) | data[31]) / 1e2;
+    gnss.hvfom = (uint16_t)((data[32] << 8) | data[33]) / 1e3;
+    gnss.vvfom = (uint16_t)((data[34] << 8) | data[35]) / 1e3;
+    gnss.gnssVerticalSpeed = (int16_t)((data[36] << 8) | data[37]) / 1e2;
+    gnss.northSouthVelocity = (int16_t)((data[38] << 8) | data[39]) / 1e1;
+    gnss.eastWestVelocity = (int16_t)((data[40] << 8) | data[41]) / 1e1;
+
+    return gnss;
+}
+
+TransponderStatus parseTransponderStatus(const uint8_t* data) {
+    TransponderStatus status;
+    status.messageID = data[0];
+    status.messageVersion = data[1];
+    status.txEnabled = (data[2] & 0x80) >> 7;
+    status.identButtonActive = (data[2] & 0x08) >> 3;
+    return status;
+}
+
+BarometerSensor parseBarometerSensor(const uint8_t* data, size_t length) {
+    BarometerSensor sensor;
+
+    if (length != 12) {
+        Serial.println("Invalid data length for Barometer Sensor message. Expected 12 bytes.");
+        return sensor;
+    }
+
+    sensor.messageID = data[0];
+    sensor.sensorType = data[1];
+    sensor.barometricPressure = ((uint32_t)(data[2] << 24 | data[3] << 16 | data[4] << 8 | data[5])) / 100.0;
+    sensor.barometricPressureAltitude = (int32_t)(data[6] << 24 | data[7] << 16 | data[8] << 8 | data[9]);
+    sensor.barometricSensorTemperature = ((int16_t)(data[10] << 8 | data[11])) / 100.0;
+
+    if (sensor.barometricPressureAltitude == 0xFFFFFFFF)
+        sensor.barometricPressureAltitude = -1;  // Indicates "Invalid"
+    if (sensor.barometricSensorTemperature == (int16_t)(0xFFFF / 100))
+        sensor.barometricSensorTemperature = -1.0;  // Indicates "Invalid"
+
+    return sensor;
+}
+
 
