@@ -1,6 +1,7 @@
 // #include "uart.h"
 #include <SD.h>
 #include <string.h>
+#include <TeensyThreads.h>
 
 #define CRC_POLYNOMIAL 0x1021
 #define FLAG_BYTE 0x7E
@@ -20,6 +21,13 @@ bool capturing = false;           // Flag to check if we are capturing a packet
 int foundpacketindex = 0;
 
 // struct definitions
+
+struct HeartbeatMessage{
+  uint8_t gnss_valid;
+  uint8_t maintenance_req;
+  uint8_t ident_active;
+  uint8_t initialized;
+};
 
 struct OwnshipReport {
     uint8_t messageID;
@@ -78,8 +86,12 @@ struct BarometerSensor {
 };
 
 
-
+HeartbeatMessage heartbeatMessage;
 OwnshipReport ownshipReport;
+GeometricAltitude geometricAltitude;
+GNSSData gnssData;
+TransponderStatus transponderStatus;
+BarometerSensor barometerSensor;
 
 void setup() {
   // put your setup code here, to run once:
@@ -89,69 +101,20 @@ void setup() {
 
   crc_init();
 
+  int a = threads.addThread(PingHandler);
+  int b = threads.addThread(test);
+  // threads.start()
+
   Serial.println("Setup complete");
 
+  
 
 }
 
 void loop() {
-  
-  while (PingSerial.available() > 0) {
-    // foundpacketindex = 0;
-        byte incomingByte = PingSerial.read();
-
-        // Check for start of packet
-        if (incomingByte == 0x7E) {
-            // If we're already capturing a packet, this is the end marker
-            if (capturing && packetIndex > 0) {
-                // End of packet - add the final 0x7E byte
-                packetBuffer[packetIndex++] = 0x7E;
-
-                // Copy the detected packet to foundPacket
-                memcpy(foundPacket, packetBuffer, packetIndex);
-                // foundpacketindex = packetIndex;
-                // Print the found packet for debugging
-                Serial.print("Detected Packet: ");
-                for (int i = 0; i < packetIndex; i++) {
-                    Serial.print(foundPacket[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
-
-                // parse
-                const char *result = process_packet(foundPacket, packetIndex);
-                Serial.println(result);
-
-
-                // Reset for the next packet
-                packetIndex = 0;
-                capturing = false;
-            } 
-            else {
-                // Start of a new packet
-                capturing = true;
-                packetIndex = 0;
-                packetBuffer[packetIndex++] = 0x7E;
-            }
-        }
-        else if (capturing) {
-            // Continue storing bytes until maxPacketSize is reached
-            if (packetIndex < maxPacketSize) {
-                packetBuffer[packetIndex++] = incomingByte;
-            } else {
-                // If packet exceeds buffer size, reset
-                capturing = false;
-                packetIndex = 0;
-              }
-          }
-
-    }
-
-
+    
   
   
-
-  delay(100);
   
 }
 
@@ -196,20 +159,22 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
 
     uint8_t msg_id = packet[0];
     uint8_t version = packet[1];
-
+    // Serial.println(msg_id);
     switch (msg_id) {
       case 0x00:
         {
-        uint8_t gnss_valid = (packet[2] >> 7) & 0x01;
-        uint8_t maintenance_req = (packet[2] >> 6) & 0x01;
-        uint8_t ident_active = (packet[2] >> 5) & 0x01;
-        uint8_t initialized = packet[2] & 0x01;
+        // uint8_t gnss_valid = (packet[2] >> 7) & 0x01;
+        // uint8_t maintenance_req = (packet[2] >> 6) & 0x01;
+        // uint8_t ident_active = (packet[2] >> 5) & 0x01;
+        // uint8_t initialized = packet[2] & 0x01;
 
-        printf("Message ID: %d\n", msg_id);
-        printf("GNSS Valid: %d\n", gnss_valid);
-        printf("Maintenance Required: %d\n", maintenance_req);
-        printf("IDENT Active: %d\n", ident_active);
-        printf("Device Initialized: %d\n", initialized);
+        parseHeartbeatMessage(&heartbeatMessage, packet);
+
+        // printf("Message ID: %d\n", msg_id);
+        // printf("GNSS Valid: %d\n", gnss_valid);
+        // printf("Maintenance Required: %d\n", maintenance_req);
+        // printf("IDENT Active: %d\n", ident_active);
+        // printf("Device Initialized: %d\n", initialized);
 
         return "Heartbeat message decoded";
         }
@@ -217,10 +182,38 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
       case 0x0A:
         {
         parseOwnshipReport(&ownshipReport, packet, length);
-        Serial.println(ownshipReport.flightIdentification);
+        // Serial.println(ownshipReport.flightIdentification);
         return "Ownship report";
         }
+
+      case 0x0B:
+      {
+        parseGeometricAltitude(&geometricAltitude, packet);
+        // Serial.println()
+        return "Geometric Altitude";
+      }
+
+      case 0x2E:
+      {
+        parseGNSSData(&gnssData, packet);
+        Serial.println("here");
+        return "GNSS data";
+      }
+
+      case 0x2F:
+      {
+        parseTransponderStatus(&transponderStatus, packet);
+        return "Transponder Status";
+      }
+
+      case 0x28:
+      {
+        parseBarometerSensor(&barometerSensor, packet, length);
+        return "Barometer Sensor";
+      }
+
       default:
+
         break;
     }
 
@@ -281,11 +274,18 @@ void printpacket(uint8_t *packet, int length) {
     for (uint8_t item: data){Serial.print(item,HEX);};Serial.println();
 }
 
+void parseHeartbeatMessage(HeartbeatMessage* heartbeat, const uint8_t* data){
+  heartbeat->gnss_valid = (data[2] >> 7) & 0x01;
+  heartbeat->maintenance_req = (data[2] >> 6) & 0x01;
+  heartbeat->ident_active = (data[2] >> 5) & 0x01;
+  heartbeat->initialized = data[2] & 0x01;
+}
+
 void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t length) {
-    if (length != 28) {
-        Serial.println("Invalid data length for Ownship Report. Expected 28 bytes.");
-        return;
-    }
+    // if (length != 28) {
+    //     Serial.println("Invalid data length for Ownship Report. Expected 28 bytes.");
+    //     return;
+    // }
     
     report->messageID = data[0];
     report->trafficAlertStatus = (data[1] & 0xF0) >> 4;
@@ -306,63 +306,125 @@ void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t lengt
 }
 
 
-GeometricAltitude parseGeometricAltitude(const uint8_t* data) {
-    GeometricAltitude altitude;
-    altitude.messageID = data[0];
-    altitude.geometricAltitude = ((int16_t)((data[1] << 8) | data[2])) * 5;
-    return altitude;
+void parseGeometricAltitude(GeometricAltitude* altitude, const uint8_t* data) {
+    altitude->messageID = data[0];
+    altitude->geometricAltitude = ((int16_t)((data[1] << 8) | data[2])) * 5;
 }
 
-GNSSData parseGNSSData(const uint8_t* data) {
-    GNSSData gnss;
-    gnss.messageID = data[0];
-    gnss.messageVersion = data[1];
-    gnss.utcTime = (uint32_t)((data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5]);
-    gnss.latitude = (int32_t)((data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9]) / 1e7;
-    gnss.longitude = (int32_t)((data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13]) / 1e7;
-    gnss.altitude = (int32_t)((data[14] << 24) | (data[15] << 16) | (data[16] << 8) | data[17]) / 1e3;
-    gnss.hpl = (uint32_t)((data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21]) / 1e3;
-    gnss.vpl = (uint32_t)((data[22] << 24) | (data[23] << 16) | (data[24] << 8) | data[25]) / 1e2;
-    gnss.hfom = (uint32_t)((data[26] << 24) | (data[27] << 16) | (data[28] << 8) | data[29]) / 1e3;
-    gnss.vfom = (uint16_t)((data[30] << 8) | data[31]) / 1e2;
-    gnss.hvfom = (uint16_t)((data[32] << 8) | data[33]) / 1e3;
-    gnss.vvfom = (uint16_t)((data[34] << 8) | data[35]) / 1e3;
-    gnss.gnssVerticalSpeed = (int16_t)((data[36] << 8) | data[37]) / 1e2;
-    gnss.northSouthVelocity = (int16_t)((data[38] << 8) | data[39]) / 1e1;
-    gnss.eastWestVelocity = (int16_t)((data[40] << 8) | data[41]) / 1e1;
+void parseGNSSData(GNSSData* gnss, const uint8_t* data) {
+    gnss->messageID = data[0];
+    gnss->messageVersion = data[1];
+    gnss->utcTime = (uint32_t)((data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5]);
+    gnss->latitude = (int32_t)((data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9]) / 1e7;
+    gnss->longitude = (int32_t)((data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13]) / 1e7;
+    gnss->altitude = (int32_t)((data[14] << 24) | (data[15] << 16) | (data[16] << 8) | data[17]) / 1e3;
+    gnss->hpl = (uint32_t)((data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21]) / 1e3;
+    gnss->vpl = (uint32_t)((data[22] << 24) | (data[23] << 16) | (data[24] << 8) | data[25]) / 1e2;
+    gnss->hfom = (uint32_t)((data[26] << 24) | (data[27] << 16) | (data[28] << 8) | data[29]) / 1e3;
+    gnss->vfom = (uint16_t)((data[30] << 8) | data[31]) / 1e2;
+    gnss->hvfom = (uint16_t)((data[32] << 8) | data[33]) / 1e3;
+    gnss->vvfom = (uint16_t)((data[34] << 8) | data[35]) / 1e3;
+    gnss->gnssVerticalSpeed = (int16_t)((data[36] << 8) | data[37]) / 1e2;
+    gnss->northSouthVelocity = (int16_t)((data[38] << 8) | data[39]) / 1e1;
+    gnss->eastWestVelocity = (int16_t)((data[40] << 8) | data[41]) / 1e1;
 
-    return gnss;
 }
 
-TransponderStatus parseTransponderStatus(const uint8_t* data) {
-    TransponderStatus status;
-    status.messageID = data[0];
-    status.messageVersion = data[1];
-    status.txEnabled = (data[2] & 0x80) >> 7;
-    status.identButtonActive = (data[2] & 0x08) >> 3;
-    return status;
+void parseTransponderStatus(TransponderStatus* status, const uint8_t* data) {
+    status->messageID = data[0];
+    status->messageVersion = data[1];
+    status->txEnabled = (data[2] & 0x80) >> 7;
+    status->identButtonActive = (data[2] & 0x08) >> 3;
 }
 
-BarometerSensor parseBarometerSensor(const uint8_t* data, size_t length) {
-    BarometerSensor sensor;
+void parseBarometerSensor(BarometerSensor* sensor, const uint8_t* data, size_t length) {
 
     if (length != 12) {
         Serial.println("Invalid data length for Barometer Sensor message. Expected 12 bytes.");
         return sensor;
     }
 
-    sensor.messageID = data[0];
-    sensor.sensorType = data[1];
-    sensor.barometricPressure = ((uint32_t)(data[2] << 24 | data[3] << 16 | data[4] << 8 | data[5])) / 100.0;
-    sensor.barometricPressureAltitude = (int32_t)(data[6] << 24 | data[7] << 16 | data[8] << 8 | data[9]);
-    sensor.barometricSensorTemperature = ((int16_t)(data[10] << 8 | data[11])) / 100.0;
+    sensor->messageID = data[0];
+    sensor->sensorType = data[1];
+    sensor->barometricPressure = ((uint32_t)(data[2] << 24 | data[3] << 16 | data[4] << 8 | data[5])) / 100.0;
+    sensor->barometricPressureAltitude = (int32_t)(data[6] << 24 | data[7] << 16 | data[8] << 8 | data[9]);
+    sensor->barometricSensorTemperature = ((int16_t)(data[10] << 8 | data[11])) / 100.0;
 
-    if (sensor.barometricPressureAltitude == 0xFFFFFFFF)
-        sensor.barometricPressureAltitude = -1;  // Indicates "Invalid"
-    if (sensor.barometricSensorTemperature == (int16_t)(0xFFFF / 100))
-        sensor.barometricSensorTemperature = -1.0;  // Indicates "Invalid"
+    if (sensor->barometricPressureAltitude == 0xFFFFFFFF)
+        sensor->barometricPressureAltitude = -1;  // Indicates "Invalid"
+    if (sensor->barometricSensorTemperature == (int16_t)(0xFFFF / 100))
+        sensor->barometricSensorTemperature = -1.0;  // Indicates "Invalid"
 
-    return sensor;
 }
 
+void PingHandler(){
+  while(1){
+    while (PingSerial.available() > 0) {
+      // foundpacketindex = 0;
+          byte incomingByte = PingSerial.read();
+
+          // Check for start of packet
+          if (incomingByte == 0x7E) {
+              // If we're already capturing a packet, this is the end marker
+              if (capturing && packetIndex > 0) {
+                  // End of packet - add the final 0x7E byte
+                  packetBuffer[packetIndex++] = 0x7E;
+
+                  // Copy the detected packet to foundPacket
+                  memcpy(foundPacket, packetBuffer, packetIndex);
+                  // foundpacketindex = packetIndex;
+                  // Print the found packet for debugging
+                  // Serial.print("Detected Packet: ");
+                  // for (int i = 0; i < packetIndex; i++) {
+                  //     Serial.print(foundPacket[i], HEX);
+                  //     Serial.print(" ");
+                  // }
+                  // Serial.println();
+
+                  // parse
+                  const char *result = process_packet(foundPacket, packetIndex);
+                  // Serial.println(result);
+
+
+                  // Reset for the next packet
+                  packetIndex = 0;
+                  capturing = false;
+              } 
+              else {
+                  // Start of a new packet
+                  capturing = true;
+                  packetIndex = 0;
+                  packetBuffer[packetIndex++] = 0x7E;
+              }
+          }
+          else if (capturing) {
+              // Continue storing bytes until maxPacketSize is reached
+              if (packetIndex < maxPacketSize) {
+                  packetBuffer[packetIndex++] = incomingByte;
+              } else {
+                  // If packet exceeds buffer size, reset
+                  capturing = false;
+                  packetIndex = 0;
+                }
+            }
+
+      }
+  }
+}
+
+void test(){
+  while(1){
+    Serial.print(ownshipReport.flightIdentification);
+    Serial.print(", ");
+    Serial.print(heartbeatMessage.gnss_valid);
+    Serial.print(", ");
+    Serial.print(ownshipReport.latitude);
+    Serial.print(", ");
+    Serial.print(ownshipReport.longitude);
+    Serial.print(", ");
+    Serial.print(barometerSensor.barometricPressure);
+    Serial.println();
+    delay(200);
+  }
+}
 
