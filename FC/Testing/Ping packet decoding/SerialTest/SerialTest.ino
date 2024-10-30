@@ -1,4 +1,3 @@
-// #include "uart.h"
 #include <SD.h>
 #include <string.h>
 #include <TeensyThreads.h>
@@ -10,10 +9,11 @@
 uint16_t Crc16Table[256];
 
 
-#define PingSerial Serial3
+#define PingSerial Serial7
 #define PingBaud 56700
+// #define PingBaud 2400
 
-const int maxPacketSize = 64;  // Define the maximum size for each packet (adjust as needed)
+const int maxPacketSize = 150;  // Define the maximum size for each packet (adjust as needed)
 byte packetBuffer[maxPacketSize]; // Buffer to store the complete packet
 byte foundPacket[maxPacketSize];  // Separate buffer to store the detected packet
 int packetIndex = 0;              // Index to track position in packetBuffer
@@ -56,18 +56,18 @@ struct GNSSData {
     uint8_t messageID;
     uint8_t messageVersion;
     uint32_t utcTime;
-    float latitude;
-    float longitude;
-    float altitude;
-    float hpl;
-    float vpl;
-    float hfom;
-    float vfom;
-    float hvfom;
-    float vvfom;
-    float gnssVerticalSpeed;
-    float northSouthVelocity;
-    float eastWestVelocity;
+    double latitude;
+    double longitude;
+    double altitude;
+    double hpl;
+    double vpl;
+    double hfom;
+    double vfom;
+    double hvfom;
+    double vvfom;
+    double gnssVerticalSpeed;
+    double northSouthVelocity;
+    double eastWestVelocity;
 };
 
 struct TransponderStatus {
@@ -113,9 +113,6 @@ void setup() {
 
 void loop() {
     
-  
-  
-  
 }
 
 
@@ -161,6 +158,7 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
     uint8_t version = packet[1];
     // Serial.println(msg_id);
     switch (msg_id) {
+      // Serial.println(msg_id);
       case 0x00:
         {
         // uint8_t gnss_valid = (packet[2] >> 7) & 0x01;
@@ -193,7 +191,7 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
         return "Geometric Altitude";
       }
 
-      case 0x2E:
+      case 46:
       {
         parseGNSSData(&gnssData, packet);
         Serial.println("here");
@@ -242,7 +240,7 @@ const char* process_packet(const uint8_t *data, size_t length) {
     // if (crc_computed != crc_received) {
     //     return "CRC check failed";
     // }
-
+    // Serial.println(String(*data), HEX);
     // Decode payload
     return decode_packet(unescaped_packet, unescaped_len - 2);
 }
@@ -291,8 +289,9 @@ void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t lengt
     report->trafficAlertStatus = (data[1] & 0xF0) >> 4;
     report->addressType = data[1] & 0x0F;
     snprintf(report->participantAddress, sizeof(report->participantAddress), "%02X%02X%02X", data[2], data[3], data[4]);
-    report->latitude = (int32_t)((data[5] << 16) | (data[6] << 8) | data[7]) * (180.0 / (1 << 23));
-    report->longitude = (int32_t)((data[8] << 16) | (data[9] << 8) | data[10]) * (180.0 / (1 << 23));
+    // report->participantAddress = (data[2] << 16) | (data[3] << 8) | data[4];
+    report->latitude = ((int32_t)((data[5] << 16) | (data[6] << 8) | data[7])) * (180.0 / (1 << 23));
+    report->longitude = ((int32_t)((data[8] << 16) | (data[9] << 8) | data[10])) * (180.0 / (1 << 23));
     report->altitude = (((data[11] << 8) | data[12]) >> 4) * 25 - 1000;
     report->miscellaneousIndicators = data[12] & 0x0F;
     report->NIC = (data[13] & 0xF0) >> 4;
@@ -314,20 +313,19 @@ void parseGeometricAltitude(GeometricAltitude* altitude, const uint8_t* data) {
 void parseGNSSData(GNSSData* gnss, const uint8_t* data) {
     gnss->messageID = data[0];
     gnss->messageVersion = data[1];
-    gnss->utcTime = (uint32_t)((data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5]);
-    gnss->latitude = (int32_t)((data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9]) / 1e7;
-    gnss->longitude = (int32_t)((data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13]) / 1e7;
-    gnss->altitude = (int32_t)((data[14] << 24) | (data[15] << 16) | (data[16] << 8) | data[17]) / 1e3;
-    gnss->hpl = (uint32_t)((data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21]) / 1e3;
-    gnss->vpl = (uint32_t)((data[22] << 24) | (data[23] << 16) | (data[24] << 8) | data[25]) / 1e2;
-    gnss->hfom = (uint32_t)((data[26] << 24) | (data[27] << 16) | (data[28] << 8) | data[29]) / 1e3;
-    gnss->vfom = (uint16_t)((data[30] << 8) | data[31]) / 1e2;
-    gnss->hvfom = (uint16_t)((data[32] << 8) | data[33]) / 1e3;
-    gnss->vvfom = (uint16_t)((data[34] << 8) | data[35]) / 1e3;
-    gnss->gnssVerticalSpeed = (int16_t)((data[36] << 8) | data[37]) / 1e2;
-    gnss->northSouthVelocity = (int16_t)((data[38] << 8) | data[39]) / 1e1;
-    gnss->eastWestVelocity = (int16_t)((data[40] << 8) | data[41]) / 1e1;
-
+    gnss->utcTime = (data[2] << 24) | (data[3] << 16) | (data[4] << 8) | data[5];
+    gnss->latitude = ((int32_t)((data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9])) / 1e7;
+    gnss->longitude = ((int32_t)((data[10] << 24) | (data[11] << 16) | (data[12] << 8) | data[13])) / 1e7;
+    gnss->altitude = ((int32_t)((data[14] << 24) | (data[15] << 16) | (data[16] << 8) | data[17])) / 1e3;
+    gnss->hpl = ((data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21]) / 1e3;
+    gnss->vpl = ((data[22] << 24) | (data[23] << 16) | (data[24] << 8) | data[25]) / 1e2;
+    gnss->hfom = ((data[26] << 24) | (data[27] << 16) | (data[28] << 8) | data[29]) / 1e3;
+    gnss->vfom = ((data[30] << 8) | data[31]) / 1e2;
+    gnss->hvfom = ((data[32] << 8) | data[33]) / 1e3;
+    gnss->vvfom = ((data[34] << 8) | data[35]) / 1e3;
+    gnss->gnssVerticalSpeed = ((int16_t)((data[36] << 8) | data[37])) / 1e2;
+    gnss->northSouthVelocity = ((int16_t)((data[38] << 8) | data[39])) / 1e1;
+    gnss->eastWestVelocity = ((int16_t)((data[40] << 8) | data[41])) / 1e1;
 }
 
 void parseTransponderStatus(TransponderStatus* status, const uint8_t* data) {
@@ -362,7 +360,7 @@ void PingHandler(){
     while (PingSerial.available() > 0) {
       // foundpacketindex = 0;
           byte incomingByte = PingSerial.read();
-
+          // Serial.print(incomingByte,HEX); Serial.print("-");
           // Check for start of packet
           if (incomingByte == 0x7E) {
               // If we're already capturing a packet, this is the end marker
