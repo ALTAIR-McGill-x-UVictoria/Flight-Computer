@@ -177,7 +177,7 @@ const char* decode_packet(const uint8_t *packet, size_t length) {
         return "Heartbeat message decoded";
         }
 
-      case 0x0A:
+      case 10:
         {
         parseOwnshipReport(&ownshipReport, packet, length);
         // Serial.println(ownshipReport.flightIdentification);
@@ -287,11 +287,21 @@ void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t lengt
     
     report->messageID = data[0];
     report->trafficAlertStatus = (data[1] & 0xF0) >> 4;
-    report->addressType = data[1] & 0x0F;
-    snprintf(report->participantAddress, sizeof(report->participantAddress), "%02X%02X%02X", data[2], data[3], data[4]);
+    // report->addressType = data[1] & 0x0F;
+    // snprintf(report->participantAddress, sizeof(report->participantAddress), "%02X%02X%02X", data[2], data[3], data[4]);
     // report->participantAddress = (data[2] << 16) | (data[3] << 8) | data[4];
-    report->latitude = ((int32_t)((data[5] << 16) | (data[6] << 8) | data[7])) * (180.0 / (1 << 23));
-    report->longitude = ((int32_t)((data[8] << 16) | (data[9] << 8) | data[10])) * (180.0 / (1 << 23));
+    int32_t latitudeRaw = (int32_t)((data[5] << 16) | (data[6] << 8) | data[7]);
+    if (latitudeRaw & 0x800000) { // Check 24th bit for negative sign
+      latitudeRaw |= 0xFF000000; // Properly sign extend to 32-bit
+    }
+    report->latitude = latitudeRaw * (180.0f / (1 << 23));
+
+    int32_t longitudeRaw = (int32_t)((data[8] << 16) | (data[9] << 8) | data[10]);
+    if (longitudeRaw & 0x800000) { // Check 24th bit for negative sign
+      longitudeRaw |= 0xFF000000; // Properly sign extend to 32-bit
+    }
+    report->longitude = longitudeRaw * (180.0f / (1 << 23));
+
     report->altitude = (((data[11] << 8) | data[12]) >> 4) * 25 - 1000;
     report->miscellaneousIndicators = data[12] & 0x0F;
     report->NIC = (data[13] & 0xF0) >> 4;
@@ -357,10 +367,12 @@ void parseBarometerSensor(BarometerSensor* sensor, const uint8_t* data, size_t l
 
 void PingHandler(){
   while(1){
+    unsigned int incomingByte = 0;
     while (PingSerial.available() > 0) {
       // foundpacketindex = 0;
-          byte incomingByte = PingSerial.read();
-          // Serial.print(incomingByte,HEX); Serial.print("-");
+          // byte incomingByte = PingSerial.read();
+          incomingByte = PingSerial.read();
+          // Serial.print(String(incomingByte,HEX)); Serial.print("-");
           // Check for start of packet
           if (incomingByte == 0x7E) {
               // If we're already capturing a packet, this is the end marker
@@ -416,11 +428,11 @@ void test(){
     Serial.print(", ");
     Serial.print(heartbeatMessage.gnss_valid);
     Serial.print(", ");
-    Serial.print(ownshipReport.latitude);
+    Serial.print(ownshipReport.latitude,DEC);
     Serial.print(", ");
-    Serial.print(ownshipReport.longitude);
-    Serial.print(", ");
-    Serial.print(barometerSensor.barometricPressure);
+    Serial.print(ownshipReport.longitude,DEC);
+    // Serial.print(", ");
+    // Serial.print(barometerSensor.barometricPressure);
     Serial.println();
     delay(200);
   }

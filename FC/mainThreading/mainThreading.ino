@@ -222,6 +222,7 @@ int toggleLEDblink = 0;
 
 elapsedMillis sendTimer;
 elapsedMillis LEDtimer;
+elapsedMillis timeSinceLastGroundPacket;
 
 float LEDtimerInput = 0;
 
@@ -258,6 +259,8 @@ bool heatingStatus = 0;
 
 #define LED_PIN 13
 bool led_state = false;
+
+int stepperThread = 0;
 
 void setup() {
 
@@ -304,7 +307,7 @@ void setup() {
 
 #if STEPPER_ENABLE
   stepperSetup();
-  threads.addThread(stepperHandler);
+  stepperThread = threads.addThread(stepperHandler);
 #endif
 
 #if ACTUATOR_ENABLE
@@ -389,9 +392,9 @@ void loopHandler(){
       heatingHandler();
     #endif
 
-    // #if STEPPER_ENABLE
-    //   stepperHandler();
-    // #endif
+    #if STEPPER_ENABLE
+      if(battery_voltage("main") < 11.3){threads.kill(stepperThread);}
+    #endif
   }
 }
 
@@ -458,6 +461,7 @@ void radioTx(char radiopacket[150]) {
 #endif
 
         FCpacketParser((char*)buf);  //parse and execute the received packet
+        timeSinceLastGroundPacket = 0;
 
       } else {
         // Serial.println("Receive failed");
@@ -561,11 +565,63 @@ void SDNewFile(){
 
 String logger(){
   String log = "";
-  log = log + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + "," + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + "," + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite;
+  log = log + ":"
+  // very inefficient, works
+  String logarr[] = {
+    // Radio
+    String(rf95.lastRssi()),
+    String(rf95.lastSNR()),
+    String(timeSinceLastGroundPacket),
+    // Status indicators
+    String(battery_voltage("main")),
+    String(battery_voltage("motor")),
+    String(led1Status),
+    String(led2Status),
+    String(led3Status),
+    String(ledIntensity),
+    String(currentStepperAngle),
+    String(actuatorStatus),
+    // Ping200XR
+    String(ownshipReport.latitude),
+    String(ownshipReport.longitude),
+    String(ownshipReport.altitude),
+    String(ownshipReport.horizontalVelocity),
+    String(ownshipReport.verticalVelocity),
+    String(ownshipReport.flightIdentification),
+    String(heartbeatMessage.ident_active),
+    String(barometerSensor.barometricPressure),
+    String(barometerSensor.barometricPressureAltitude),
+    String(barometerSensor.barometricSensorTemperature),
+    // IMU
+    String(stAngles.fRoll),
+    String(stAngles.fPitch),
+    String(stAngles.fYaw),
+    String(stAccelRawData.s16X),
+    String(stAccelRawData.s16Y),
+    String(stAccelRawData.s16Z),
+    String(stGyroRawData.s16X),
+    String(stGyroRawData.s16Y),
+    String(stGyroRawData.s16Z),
+    String(stMagnRawData.s16X),
+    String(stMagnRawData.s16Y),
+    String(stMagnRawData.s16Z),
+    String((float)s32PressureVal / 100),
+    String((float)s32AltitudeVal / 100),
+    String((float)s32TemperatureVal / 100)
+
+  }
+  for (String str: logarr){
+    log = log + str + ",";
+  }
+
+  // reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + ","
+    // + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + ","
+    // + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + heatingStatus + "," + actuatorStatus + "," 
+    // + battery_voltage("motor") + "," + String(ownshipReport.flightIdentification) + "," + String(ownshipReport.latitude,DEC) + "," + String(ownshipReport.longitude,DEC) + "," + String(ownshipReport.altitude)
   return log;
 }
 
-char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
+char* formRadioPacket(bool enable_long, String cmdid) {
 
   //FOR FUTURE, FORM AS STRUCT AND TRANSMIT WITHOUT COMMAS 
 
@@ -579,7 +635,7 @@ char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
     packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," + stAngles.fPitch + ","
     + stAngles.fRoll + "," + stAngles.fYaw + "," + stAccelRawData.s16X + "," + stAccelRawData.s16Y + "," + stAccelRawData.s16Z + "," + (float)s32PressureVal / 100 + ","
     + (float)s32AltitudeVal / 100 + "," + (float)s32TemperatureVal / 100 + "," + led1Status + led2Status + led3Status + "," + ledIntensity + "," + enableSDWrite + "," + heatingStatus + "," + actuatorStatus + "," 
-    + battery_voltage("motor") + "," + String(ownshipReport.flightIdentification) + "," + gnssData.latitude + "," + gnssData.longitude + "," + gnssData.altitude;
+    + battery_voltage("motor") + "," + String(ownshipReport.flightIdentification) + "," + String(ownshipReport.latitude,DEC) + "," + String(ownshipReport.longitude,DEC) + "," + String(ownshipReport.altitude);
 
     reception_confirm = 0;
     // Serial.println(ownshipReport.flightIdentification);
@@ -588,7 +644,7 @@ char* formRadioPacket(bool enable_long, String cmdid) {  //includes DAQ
   }
 
   //default small packet
-  packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main");
+  packet = packet + cmdid + ":" + reception_confirm + "," + rf95.lastRssi() + "," + rf95.lastSNR() + "," + battery_voltage("main") + "," +  String(ownshipReport.latitude,DEC) + "," + String(ownshipReport.longitude,DEC);
 
   reception_confirm = 0;
 
@@ -1198,19 +1254,21 @@ void parseHeartbeatMessage(HeartbeatMessage* heartbeat, const uint8_t* data){
   heartbeat->initialized = data[2] & 0x01;
 }
 
-void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t length) {
-    // if (length != 28) {
-    //     Serial.println("Invalid data length for Ownship Report. Expected 28 bytes.");
-    //     return;
-    // }
-    
+void parseOwnshipReport(OwnshipReport* report, const uint8_t* data, size_t length) {    
     report->messageID = data[0];
     report->trafficAlertStatus = (data[1] & 0xF0) >> 4;
-    report->addressType = data[1] & 0x0F;
-    snprintf(report->participantAddress, sizeof(report->participantAddress), "%02X%02X%02X", data[2], data[3], data[4]);
-    // report->participantAddress = (data[2] << 16) | (data[3] << 8) | data[4];
-    report->latitude = ((int32_t)((data[5] << 16) | (data[6] << 8) | data[7])) * (180.0 / (1 << 23));
-    report->longitude = ((int32_t)((data[8] << 16) | (data[9] << 8) | data[10])) * (180.0 / (1 << 23));
+    int32_t latitudeRaw = (int32_t)((data[5] << 16) | (data[6] << 8) | data[7]);
+    if (latitudeRaw & 0x800000) { // Check 24th bit for negative sign
+      latitudeRaw |= 0xFF000000; // Properly sign extend to 32-bit
+    }
+    report->latitude = latitudeRaw * (180.0f / (1 << 23));
+
+    int32_t longitudeRaw = (int32_t)((data[8] << 16) | (data[9] << 8) | data[10]);
+    if (longitudeRaw & 0x800000) { // Check 24th bit for negative sign
+      longitudeRaw |= 0xFF000000; // Properly sign extend to 32-bit
+    }
+    report->longitude = longitudeRaw * (180.0f / (1 << 23));
+
     report->altitude = (((data[11] << 8) | data[12]) >> 4) * 25 - 1000;
     report->miscellaneousIndicators = data[12] & 0x0F;
     report->NIC = (data[13] & 0xF0) >> 4;
