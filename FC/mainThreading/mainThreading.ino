@@ -50,6 +50,9 @@ float voltage;
 #define SD_DEBUG 0
 #define PING_ENABLE 1
 
+// in psixx
+#define PRESSURE_TO_RELEASE 
+
 //Radio loop timer (fastest transmission speed)
 #define LOOP_TIMER 100
 #define FLIGHT_MODE_TIMER 500
@@ -108,6 +111,8 @@ bool capturing = false;           // Flag to check if we are capturing a packet
 int foundpacketindex = 0;
 
 // struct definitions
+
+
 
 struct HeartbeatMessage{
   uint8_t gnss_valid;
@@ -333,7 +338,12 @@ void loop() {
 }
 
 
-
+void DAQacquire(){
+  while(1){
+    imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
+    pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+  }
+}
 
 /*
 =========================
@@ -565,7 +575,7 @@ void SDNewFile(){
 
 String logger(){
   String log = "";
-  log = log + ":"
+  log = log + ":";
   // very inefficient, works
   String logarr[] = {
     // Radio
@@ -609,7 +619,7 @@ String logger(){
     String((float)s32AltitudeVal / 100),
     String((float)s32TemperatureVal / 100)
 
-  }
+  };
   for (String str: logarr){
     log = log + str + ",";
   }
@@ -809,11 +819,13 @@ void FCpacketParser(char* packet) {
 
     case 19:
       actuatorStatus = 1;
+      digitalWrite(ACTUATOR_PIN, HIGH);
       reception_confirm = 1;
       break;
 
     case 20:
       actuatorStatus = 0;
+      digitalWrite(ACTUATOR_PIN, LOW);
       reception_confirm = 1;
       break;
 
@@ -880,7 +892,11 @@ void LEDhandler() {
 }
 
 void actuatorHandler(){
-  digitalWrite(ACTUATOR_PIN, actuatorStatus == 1 ? HIGH : LOW);
+  // if ((float)s32PressureVal / 100 < PRESSURE_TO_RELEASE || millis() >= 3*3600000){
+    // digitalWrite(ACTUATOR_PIN, actuatorStatus == 1 ? HIGH : LOW);
+    // digitalWrite(ACTUATOR_PIN, HIGH);
+    // actuatorStatus = 1;
+  }
 }
 
 void stepperSetup() {
@@ -1083,12 +1099,7 @@ void reboot() {
   SCB_AIRCR = 0x05FA0004;
 }
 
-void DAQacquire(){
-  while(1){
-  imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-  pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-  }
-}
+
 
 // Ping200XR
 
