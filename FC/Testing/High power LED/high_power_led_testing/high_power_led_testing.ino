@@ -1,4 +1,4 @@
-#define PWM_pin1 14
+#define PWM_pin1 9
 #define PWM_pin2 2
 #define PWM_pin3 15
 
@@ -10,6 +10,7 @@ void setup() {
   pinMode(PWM_pin1, OUTPUT);
   pinMode(PWM_pin2, OUTPUT);
   pinMode(PWM_pin3, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
@@ -17,6 +18,7 @@ void loop() {
   analogWrite(PWM_pin1, 255/5);
   analogWrite(PWM_pin2, 255/5);
   analogWrite(PWM_pin3, 255/5);
+  digitalWrite(LED_BUILTIN,HIGH);
   delay(1000);
   // D = 10%
   analogWrite(PWM_pin1, 255/10);
