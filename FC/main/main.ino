@@ -39,8 +39,8 @@ float voltage;
 
 //Functionality enable definitions
 #define RX_ENABLE 1
-#define DAQ_ENABLE 1
-#define SD_ENABLE 1
+#define DAQ_ENABLE 0
+#define SD_ENABLE 0
 #define LED_ENABLE 0
 #define STEPPER_ENABLE 0
 #define ACTUATOR_ENABLE 0
@@ -53,7 +53,7 @@ float voltage;
 #define FLIGHT_MODE_TIMER 200
 #define FLIGHT_MODE_COUNT 5
 
-#define ENABLE_SERIAL 0  //Enable Serial port
+#define ENABLE_SERIAL 1  //Enable Serial port
 
 //Stepper motor definitions
 //TO CHANGE

@@ -1,6 +1,5 @@
 //Flight Computer Main
 
-// #include <RadioLib.h>
 #include <ArduinoQueue.h>
 #include "Waveshare_10Dof-D.h"
 // #include "RadioLogic.h"
@@ -16,7 +15,7 @@
 
 //Radio pin definitions
 #define RFM95_RST 20  //5
-#define RFM95_CS 10
+#define RFM95_CS 37
 #define RFM95_INT 21  //4
 
 //LoRa parameters definitions
@@ -41,21 +40,21 @@ float voltage;
 //Functionality enable definitions
 #define RX_ENABLE 1
 #define DAQ_ENABLE 1
-#define SD_ENABLE 1
-#define LED_ENABLE 1
+#define SD_ENABLE 0
+#define LED_ENABLE 0
 #define STEPPER_ENABLE 0
-#define ACTUATOR_ENABLE 1
+#define ACTUATOR_ENABLE 0
 #define HEATING_ENABLE 0
 #define DAQ_DEBUG 0
 #define SD_DEBUG 0
-#define PING_ENABLE 1
+#define PING_ENABLE 0
 
 // in psixx
 #define PRESSURE_TO_RELEASE 264
 
 //Radio loop timer (fastest transmission speed)
-#define LOOP_TIMER 500
-#define FLIGHT_MODE_TIMER 500
+#define LOOP_TIMER 200
+#define FLIGHT_MODE_TIMER 200
 #define FLIGHT_MODE_COUNT 3
 #define SD_TIMER 50
 
