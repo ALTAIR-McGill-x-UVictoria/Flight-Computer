@@ -539,14 +539,9 @@ void parseData() {
 }
 
 void SDSetup() {
-  // Serial.print("Initializing SD card...");
-
   // see if the card is present and can be initialized:
   if (!SD.begin(BUILTIN_SDCARD)) {
-    // Serial.println("Card failed, or not presen
-    while (1) {
-      // No SD card, so don't do anything more - stay stuck here
-    }
+    return 1; //fail
   }
 
   // Serial.println("Card initialized.");
@@ -555,6 +550,8 @@ void SDSetup() {
     i++;
   }
   currentFilePath = "datalog_" + String(i) + ".txt";
+
+  return 1;
 }
 
 void SDWrite(String log) {
