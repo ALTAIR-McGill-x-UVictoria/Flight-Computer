@@ -23,12 +23,12 @@ void Radio::setup() {
     delay(10);
 
     if (!rf95->init()) {
-        Serial.println("LoRa radio init failed");
+        // Serial.println("LoRa radio init failed");
         while (1);
     }
 
     if (!rf95->setFrequency(RF95_FREQ)) {
-        Serial.println("setFrequency failed");
+        // Serial.println("setFrequency failed");
         while (1);
     }
 
@@ -60,33 +60,29 @@ void Radio::FCradioHandler(const char* packet) {
     strncpy(radiopacket, packet, sizeof(radiopacket) - 1);
     radiopacket[sizeof(radiopacket) - 1] = '\0';
     
-    // send packet
+    // Send packet
     radioTx(radiopacket);
 
     // Check for reply
     if (radioRx(reply, &len)) {
-
         lastRSSI = rf95->lastRssi();
         lastSNR = rf95->lastSNR();
 
         int command;
         float argument;
         
+        // Serial.println(reply);
+
         if (parseReply(reply, command, argument)) {
-            
+            // Store the command as acknowledgement
             currentPacket.ack = command;
             
-            // Handle different commands
-            switch (command) {
-                case 0:
-                    // Handle command 0
-                    break;
-
-                case 1:
-                    // Handle command 1
-                    break;
-
-            }
+            // Debug print
+            // Serial.print("Received command: ");
+            // Serial.println(command);
+        } else {
+            // Reset ack if parsing failed
+            currentPacket.ack = 0;
         }
     }
 }
