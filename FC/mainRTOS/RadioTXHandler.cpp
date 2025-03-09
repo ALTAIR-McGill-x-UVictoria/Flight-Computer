@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <stdlib.h>
 
+#define buzzerPin 22
+
 extern radioPacket currentPacket;  // Add this line to access the global struct
 
 Radio::Radio() : timeout(3000) {
@@ -80,10 +82,24 @@ void Radio::FCradioHandler(const char* packet) {
             // Debug print
             // Serial.print("Received command: ");
             // Serial.println(command);
+
+            switch (command)
+            {
+            case 1:
+
+                break;
+            
+            default:
+                break;
+            }
+
+
         } else {
             // Reset ack if parsing failed
             currentPacket.ack = 0;
         }
+
+        
     }
 }
 
@@ -108,3 +124,4 @@ bool Radio::parseReply(const char* reply, int& command, float& argument) {
     return true;
 
 }
+

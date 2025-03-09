@@ -14,6 +14,8 @@
 
 // Macros
 #define GPS_SERIAL Serial8
+#define GPS_BAUD 9600
+#define BUZZER_PIN 22
 
 // Singleton instances
 
