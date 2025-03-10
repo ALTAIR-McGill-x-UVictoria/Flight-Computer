@@ -23,11 +23,20 @@
 Radio radio;
 
 void setup() {
+    // Initialize serial for debugging
+    Serial.begin(115200);
+    while (!Serial) delay(10);
+    
     radio.setup();
     sensorSetup();
     SDSetup();
     
-    GPS_SERIAL.begin(9600);  // Begin GPS serial communication
+    // GPS setup
+    GPS_SERIAL.begin(GPS_BAUD);
+    
+    // Initialize GPS data structure
+    currentGPSData.valid = false;
+    currentGPSData.satellites = 0;
     
     // Create threads
     threads.addThread(DAQacquire, 0);

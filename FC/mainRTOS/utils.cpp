@@ -59,44 +59,53 @@ void DAQacquire() {
 }
 
 void GPSacquire() {
-    char gpsString[100];
-    int index = 0;
+    static char gpsString[100];
+    static int index = 0;
     
     while(1) {
-        if (Serial1.available()) {
-            char c = Serial1.read();
+        while (GPS_SERIAL.available()) {
+            char c = GPS_SERIAL.read();
             
-            // Store character
-            if (c != '\n' && index < 99) {
+            // Check for line ending
+            if (c == '\n' || c == '\r') {
+                if (index > 0) {  // Only process non-empty lines
+                    gpsString[index] = '\0';  // Null terminate
+                    
+                    // Only parse if it's a valid NMEA sentence
+                    if (gpsString[0] == '$' && index > 6) {
+                        GPSData tempData;
+                        if (parseGPSString(gpsString, tempData)) {
+                            GPSmutex.lock();
+                            currentGPSData = tempData;
+                            // Only update valid flag if we got a valid fix
+                            if (tempData.valid) {
+                                currentGPSData.valid = true;
+                            }
+                            GPSmutex.unlock();
+                            
+                            // For debugging
+                            // Serial.println(gpsString);
+                        }
+                    }
+                    index = 0;  // Reset for next line
+                }
+            }
+            // Store character if we have room
+            else if (index < sizeof(gpsString) - 1) {
                 gpsString[index++] = c;
             }
-            // End of line detected
-            else if (c == '\n') {
-                gpsString[index] = '\0';  // Null terminate
-                
-                GPSData tempData;
-                if (parseGPSString(gpsString, tempData)) {
-                    GPSmutex.lock();
-                    currentGPSData = tempData;
-                    GPSmutex.unlock();
-                }
-                
-                // Reset for next line
-                index = 0;
-            }
         }
-        threads.yield();  // Give other threads a chance to run
+        threads.yield();
     }
 }
 
 void formRadioPacket(char* packet, size_t packet_size) {
-    DAQmutex.lock();  // Lock while accessing shared data
-    GPSmutex.lock();  // Lock while accessing GPS data
+    DAQmutex.lock();
+    GPSmutex.lock();
     
-    // Clean temporary buffer first
     memset(packet, 0, packet_size);
     
-    // Format packet with exact field widths and no null padding
+    // Add %.2f for bearing in format string
     int written = snprintf(packet, packet_size,
         "%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
         currentPacket.ack,
@@ -153,14 +162,17 @@ void updateRadioPacket(int rssi, int snr) {
     currentPacket.gpsTime = currentGPSData.time;
     currentPacket.gpsValid = currentGPSData.valid;
     
+    
     GPSmutex.unlock();
     DAQmutex.unlock();
 }
 
 bool parseGPSString(const char* gpsString, GPSData& data) {
-    // Check if it's a GPRMC sentence
+    // Check for different NMEA sentences
     if (strncmp(gpsString, "$GPRMC", 6) == 0) {
         return parseGPRMC(gpsString, data);
+    } else if (strncmp(gpsString, "$GPGGA", 6) == 0) {
+        return parseGPGGA(gpsString, data);
     }
     return false;
 }
@@ -170,23 +182,84 @@ bool parseGPRMC(const char* rmcString, GPSData& data) {
     char tempStr[100];
     strcpy(tempStr, rmcString);
     
-    // First token is $GPRMC
-    token = strtok(tempStr, ",");
+    // $GPRMC,171318.00,A,4530.35425,N,07334.54939,W,5.540,2.87,100325,,,A*7B
+    token = strtok(tempStr, ",");  // $GPRMC
     if (!token) return false;
     
-    // Time
+    // Time (HHMMSS.SS)
     token = strtok(NULL, ",");
     if (token) data.time = atof(token);
     
     // Status (A=valid, V=invalid)
     token = strtok(NULL, ",");
-    if (token) data.valid = (token[0] == 'A');
+    if (!token || token[0] != 'A') {
+        data.valid = false;
+        return false;
+    }
+    data.valid = true;
+    
+    // Latitude (DDMM.MMMMM)
+    token = strtok(NULL, ",");
+    if (token) {
+        float raw = atof(token);
+        int degrees = (int)(raw / 100);
+        float minutes = raw - (degrees * 100);
+        data.latitude = degrees + (minutes / 60.0);
+        
+        // N/S indicator
+        token = strtok(NULL, ",");
+        if (token && token[0] == 'S') data.latitude = -data.latitude;
+    }
+    
+    // Longitude (DDDMM.MMMMM)
+    token = strtok(NULL, ",");
+    if (token) {
+        float raw = atof(token);
+        int degrees = (int)(raw / 100);
+        float minutes = raw - (degrees * 100);
+        data.longitude = degrees + (minutes / 60.0);
+        
+        // E/W indicator
+        token = strtok(NULL, ",");
+        if (token && token[0] == 'W') data.longitude = -data.longitude;
+    }
+    
+    // Speed (knots)
+    token = strtok(NULL, ",");
+    if (token) {
+        data.speed = atof(token) * 1.852; // Convert knots to km/h
+    }
+    
+    // Course/Track (true)
+    token = strtok(NULL, ",");
+    if (token) data.course = atof(token);
+    
+    // Date (DDMMYY)
+    token = strtok(NULL, ",");
+    if (token) data.date = atoi(token);
+    
+    return true;
+}
+
+bool parseGPGGA(const char* ggaString, GPSData& data) {
+    char* token;
+    char tempStr[100];
+    strcpy(tempStr, ggaString);
+    
+    // $GPGGA,171318.00,4530.35425,N,07334.54939,W,1,04,3.40,29.8,M,-32.6,M,,*5F
+    token = strtok(tempStr, ",");  // $GPGGA
+    if (!token) return false;
+    
+    // Time
+    token = strtok(NULL, ",");
     
     // Latitude
     token = strtok(NULL, ",");
     if (token) {
-        float deg = atof(token);
-        data.latitude = (int)(deg/100) + (deg - ((int)(deg/100) * 100))/60.0;
+        float raw = atof(token);
+        int degrees = (int)(raw / 100);
+        float minutes = raw - (degrees * 100);
+        data.latitude = degrees + (minutes / 60.0);
         
         // N/S indicator
         token = strtok(NULL, ",");
@@ -196,25 +269,35 @@ bool parseGPRMC(const char* rmcString, GPSData& data) {
     // Longitude
     token = strtok(NULL, ",");
     if (token) {
-        float deg = atof(token);
-        data.longitude = (int)(deg/100) + (deg - ((int)(deg/100) * 100))/60.0;
+        float raw = atof(token);
+        int degrees = (int)(raw / 100);
+        float minutes = raw - (degrees * 100);
+        data.longitude = degrees + (minutes / 60.0);
         
         // E/W indicator
         token = strtok(NULL, ",");
         if (token && token[0] == 'W') data.longitude = -data.longitude;
     }
     
-    // Speed
+    // Fix quality
     token = strtok(NULL, ",");
-    if (token) data.speed = atof(token);
+    if (!token || token[0] == '0') {
+        data.valid = false;
+        return false;
+    }
+    data.valid = true;
     
-    // Course
+    // Number of satellites
     token = strtok(NULL, ",");
-    if (token) data.course = atof(token);
+    if (token) data.satellites = atoi(token);
     
-    // Date
+    // HDOP
     token = strtok(NULL, ",");
-    if (token) data.date = atoi(token);
+    if (token) data.hdop = atof(token);
+    
+    // Altitude
+    token = strtok(NULL, ",");
+    if (token) data.altitude = atof(token);
     
     return true;
 }
