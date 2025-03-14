@@ -1,12 +1,13 @@
 #include "RadioTXHandler.h"
+#include "utils.h"  // Include to access buzzer and calibration functions
 #include <Arduino.h>
 #include <stdlib.h>
 
-#define buzzerPin 22
+#define BUZZER_PIN 22
 
-extern radioPacket currentPacket;  // Add this line to access the global struct
+extern radioPacket currentPacket;  // Access the global struct
 
-Radio::Radio() : timeout(3000) {
+Radio::Radio() : timeout(500) {
     rf95 = new RH_RF95(RFM95_CS, RFM95_INT);
 }
 
@@ -62,44 +63,43 @@ void Radio::FCradioHandler(const char* packet) {
     strncpy(radiopacket, packet, sizeof(radiopacket) - 1);
     radiopacket[sizeof(radiopacket) - 1] = '\0';
     
+    // Add debug output
+    // Serial.print("Sending packet: ");
+    // Serial.println(radiopacket);
+    
     // Send packet
     radioTx(radiopacket);
+    // Serial.println("Packet sent");
 
-    // Check for reply
+    // Check for reply with shorter timeout
     if (radioRx(reply, &len)) {
+        // Serial.print("Reply received: ");
+        // Serial.println(reply);
         lastRSSI = rf95->lastRssi();
         lastSNR = rf95->lastSNR();
 
         int command;
         float argument;
         
-        // Serial.println(reply);
-
         if (parseReply(reply, command, argument)) {
-            // Store the command as acknowledgement
             currentPacket.ack = command;
             
-            // Debug print
-            // Serial.print("Received command: ");
-            // Serial.println(command);
-
-            switch (command)
-            {
+            switch (command) {
             case 1:
-
+                playBuzzer("warning");  // Play buzzer with warning pattern
                 break;
-            
+            // other cases...
+            case 6:
+                calibrateIMU();
+                break;
             default:
                 break;
             }
-
-
         } else {
-            // Reset ack if parsing failed
             currentPacket.ack = 0;
         }
-
-        
+    } else {
+        // Serial.println("No reply received");
     }
 }
 

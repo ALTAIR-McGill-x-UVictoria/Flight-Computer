@@ -32,8 +32,11 @@ struct GPSData {
 bool SDSetup();
 void SDWrite(const String& data);
 void sensorSetup();
+void calibrateIMU();
 void DAQacquire();
 void GPSacquire();
+void playBuzzer(const String& jingleType);
+void updateBuzzer();
 
 // GPS parsing functions
 bool parseGPSString(const char* gpsString, GPSData& data);

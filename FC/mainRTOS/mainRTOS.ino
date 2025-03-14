@@ -30,6 +30,10 @@ void setup() {
     radio.setup();
     sensorSetup();
     SDSetup();
+
+    // Buzzer
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(BUZZER_PIN, LOW);
     
     // GPS setup
     GPS_SERIAL.begin(GPS_BAUD);
@@ -41,16 +45,17 @@ void setup() {
     // Create threads
     threads.addThread(DAQacquire, 0);
     threads.addThread(GPSacquire, 1);
+
+    
 }
 
 void loop() {
-    
     updateRadioPacket(radio.lastRSSI, radio.lastSNR);
     char packet[150];
     formRadioPacket(packet, sizeof(packet));
     radio.FCradioHandler(packet);
-    delay(500);
-
+    updateBuzzer();  // Keep only this line to update the buzzer state
+    delay(250);
 }
 
 
