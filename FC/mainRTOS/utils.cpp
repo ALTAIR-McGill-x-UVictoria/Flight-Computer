@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "notes.h"  // Include the new header file with note definitions
 #include <stdio.h>
 
 // Define global variables
@@ -7,6 +8,10 @@ IMU_ST_SENSOR_DATA stGyroRawData;
 IMU_ST_SENSOR_DATA stAccelRawData;
 IMU_ST_SENSOR_DATA stMagnRawData;
 int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
+
+// Photodiode values
+int photodiodeValue1 = 0;
+int photodiodeValue2 = 0;
 
 // Add offset variables for IMU calibration
 float fRollOffset = 0.0f;
@@ -24,12 +29,43 @@ radioPacket currentPacket;
 // Define buzzer pin
 #define BUZZER_PIN 22
 
+// Structure to hold tone pattern data
+struct ToneStep {
+    int frequency;  // frequency in Hz, 0 means silence
+    int duration;   // duration in ms
+};
+
+// Jingle patterns - define up to 8 steps for each jingle
+const ToneStep calibrationJingle[8] = {
+    {NOTE_C4, 100}, {0, 50}, {NOTE_E4, 100}, {0, 50}, 
+    {NOTE_G4, 100}, {0, 100}, {NOTE_C5, 500}, {0, 0}
+};
+
+const ToneStep successJingle[8] = {
+    {NOTE_C4, 150}, {0, 50}, {NOTE_E4, 150}, {0, 50}, 
+    {NOTE_G4, 300}, {0, 0}, {0, 0}, {0, 0}
+};
+
+const ToneStep errorJingle[8] = {
+    {NOTE_G4, 300}, {0, 50}, {NOTE_E4, 150}, {0, 50}, 
+    {NOTE_C4, 100}, {0, 0}, {0, 0}, {0, 0}
+};
+
+const ToneStep warningJingle[8] = {
+    {NOTE_A4, 200}, {0, 200}, {NOTE_A4, 200}, {0, 0}, 
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}
+};
+
 // Global variables for non-blocking buzzer control
 bool buzzerActive = false;
 unsigned long buzzerStartTime = 0;
 String currentJingle = "";
 int jingleStep = 0;
 unsigned long lastBeepTime = 0;
+
+// Global variables for tracking jingle playback state
+const ToneStep* currentPattern = nullptr;
+int maxSteps = 0;
 
 bool SDSetup() {
     if (!SD.begin(BUILTIN_SDCARD)) {
@@ -147,6 +183,9 @@ void DAQacquire() {
         stAngles.fYaw -= fYawOffset;
         
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+
+        // photodiode readout
+        photodiodeAcquire(&photodiodeValue1, &photodiodeValue2);
         
         // Release the mutex when done
         DAQmutex.unlock();
@@ -203,7 +242,7 @@ void formRadioPacket(char* packet, size_t packet_size) {
     
     // Add %.2f for bearing in format string
     int written = snprintf(packet, packet_size,
-        "%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
+        "%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
         currentPacket.ack,
         currentPacket.RSSI,
         currentPacket.SNR,
@@ -215,6 +254,8 @@ void formRadioPacket(char* packet, size_t packet_size) {
         currentPacket.Altitude,
         currentPacket.SDStatus ? 1 : 0,
         currentPacket.actuatorStatus ? 1 : 0,
+        currentPacket.photodiodeValue1,
+        currentPacket.photodiodeValue2,
         currentPacket.gpsLat,
         currentPacket.gpsLon,
         currentPacket.gpsAlt,
@@ -249,6 +290,10 @@ void updateRadioPacket(int rssi, int snr) {
     currentPacket.Pressure = s32PressureVal / 100;
     currentPacket.Temperature = s32TemperatureVal / 100;
     currentPacket.Altitude = s32AltitudeVal / 100;
+
+    // Photodiode data
+    currentPacket.photodiodeValue1 = photodiodeValue1;
+    currentPacket.photodiodeValue2 = photodiodeValue2;
     
     // GPS data
     currentPacket.gpsLat = currentGPSData.latitude;
@@ -418,11 +463,37 @@ void playBuzzer(const String& jingleType) {
     currentJingle = jingleType;
     jingleStep = 0;
     buzzerActive = true;
-    buzzerStartTime = millis();
     lastBeepTime = millis();
     
-    // Initial beep for immediate feedback
-    digitalWrite(BUZZER_PIN, HIGH);
+    // Select the appropriate jingle pattern
+    if (jingleType == "calibration") {
+        currentPattern = calibrationJingle;
+        maxSteps = 8;
+    }
+    else if (jingleType == "success") {
+        currentPattern = successJingle;
+        maxSteps = 6;
+    }
+    else if (jingleType == "error") {
+        currentPattern = errorJingle;
+        maxSteps = 6;
+    }
+    else if (jingleType == "warning") {
+        currentPattern = warningJingle;
+        maxSteps = 4;
+    }
+    else {
+        // Default simple beep
+        currentPattern = warningJingle;
+        maxSteps = 2;
+    }
+    
+    // Start playing the first tone
+    if (currentPattern[0].frequency > 0) {
+        tone(BUZZER_PIN, currentPattern[0].frequency);
+    } else {
+        noTone(BUZZER_PIN);
+    }
     
     Serial.print("Playing jingle: ");
     Serial.println(jingleType);
@@ -430,172 +501,38 @@ void playBuzzer(const String& jingleType) {
 
 // Function to update buzzer state (call this in main loop)
 void updateBuzzer() {
-    if (!buzzerActive) return;
+    if (!buzzerActive || currentPattern == nullptr) return;
     
     unsigned long currentTime = millis();
     
-    // Different jingle patterns
-    if (currentJingle == "calibration") {
-        // Pattern: three short beeps followed by one long beep
-        switch (jingleStep) {
-            case 0: // First beep already started
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 1: // First pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 2: // Second beep
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 3: // Second pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 4: // Third beep
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 5: // Third pause
-                if (currentTime - lastBeepTime >= 200) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 6: // Final long beep
-                if (currentTime - lastBeepTime >= 500) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    buzzerActive = false;
-                }
-                break;
-        }
-    }
-    else if (currentJingle == "success") {
-        // Pattern: ascending three beeps
-        switch (jingleStep) {
-            case 0: // First beep already started
-                if (currentTime - lastBeepTime >= 150) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 1: // First pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 2: // Second beep
-                if (currentTime - lastBeepTime >= 150) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 3: // Second pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 4: // Third beep
-                if (currentTime - lastBeepTime >= 300) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    buzzerActive = false;
-                }
-                break;
-        }
-    }
-    else if (currentJingle == "error") {
-        // Pattern: descending three beeps
-        switch (jingleStep) {
-            case 0: // First long beep already started
-                if (currentTime - lastBeepTime >= 300) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 1: // First pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 2: // Second beep
-                if (currentTime - lastBeepTime >= 150) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 3: // Second pause
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 4: // Third short beep
-                if (currentTime - lastBeepTime >= 100) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    buzzerActive = false;
-                }
-                break;
-        }
-    }
-    else if (currentJingle == "warning") {
-        // Pattern: two alternating beeps
-        switch (jingleStep) {
-            case 0: // First beep already started
-                if (currentTime - lastBeepTime >= 200) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 1: // First pause
-                if (currentTime - lastBeepTime >= 200) {
-                    digitalWrite(BUZZER_PIN, HIGH);
-                    lastBeepTime = currentTime;
-                    jingleStep++;
-                }
-                break;
-            case 2: // Second beep
-                if (currentTime - lastBeepTime >= 200) {
-                    digitalWrite(BUZZER_PIN, LOW);
-                    buzzerActive = false;
-                }
-                break;
-        }
-    }
-    else {
-        // Default simple beep
-        if (currentTime - buzzerStartTime >= 200) {
-            digitalWrite(BUZZER_PIN, LOW);
+    // Check if it's time to move to the next step
+    if (currentTime - lastBeepTime >= currentPattern[jingleStep].duration) {
+        // Move to next step
+        jingleStep++;
+        
+        // Check if we've reached the end of the pattern
+        if (jingleStep >= maxSteps || currentPattern[jingleStep].duration == 0) {
+            noTone(BUZZER_PIN);
             buzzerActive = false;
+            return;
         }
+        
+        // Play the next tone (or silence)
+        if (currentPattern[jingleStep].frequency > 0) {
+            tone(BUZZER_PIN, currentPattern[jingleStep].frequency);
+        } else {
+            noTone(BUZZER_PIN);
+        }
+        
+        lastBeepTime = currentTime;
     }
+}
+
+void photodiodeSetup() {
+    return;
+}
+
+void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2) {
+    *photodiodeValue1 = analogRead(26);
+    *photodiodeValue2 = analogRead(27);
 }
