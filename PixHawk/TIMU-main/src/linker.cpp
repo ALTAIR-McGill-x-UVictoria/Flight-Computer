@@ -20,9 +20,9 @@ int Linker::read_message(mavlink_message_t &message)
     uint8_t cp;
     uint8_t msgReceived = false;
 
-    if (Serial1.available() > 0) 
+    if (Serial2.available() > 0) 
     {
-        cp = Serial1.read();
+        cp = Serial2.read();
 
         if (1 > 0) // Specific arduino tric to force message reading.
         {
@@ -85,14 +85,14 @@ int Linker::write_message(const mavlink_message_t &message)
     char buf[300];
 
     unsigned len = mavlink_msg_to_send_buffer((uint8_t*)buf, &message);
-    Serial1.write(buf);
+    Serial2.write(buf);
 
     return len;
 }
 
 void Linker::stop()
 {
-    Serial1.end();
+    Serial2.end();
     this->logger.close();
     this->logger.end();
 }

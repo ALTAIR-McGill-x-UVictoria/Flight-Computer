@@ -1293,7 +1293,7 @@ k             Fix SPI bus speed errors on 8MHz Arduinos.
 	     Updated sx1262_client.ino and sx1262_server.ino to demonstrate usage.
 
 \version 1.139 2025-01-07
-             Updated CubeCell support for Heltec CubeCell board 1.5.0 installed in Arduino IDE
+             Updated Cube Cell support for Heltec CubeCell board 1.5.0 installed in Arduino IDE
 	     per https://docs.heltec.org/en/node/asr650x/asr650x_general_docs/quick_start/cubecell-use-arduino-board-manager.html
 
 \version 1.140 2025-01-07
@@ -1637,7 +1637,11 @@ these examples and explanations and extend them to suit your needs.
  #else
   #include <wiring.h>
  #endif
- #include <SPI.h>
+#if defined(TEENSYDUINO)
+#include "SPI.h"
+#else
+#include <SPI.h>
+#endif
  #define RH_HAVE_HARDWARE_SPI
  #define RH_HAVE_SERIAL
  

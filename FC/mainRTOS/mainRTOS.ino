@@ -8,6 +8,7 @@
 #include <TeensyThreads.h>
 #include "RadioTXHandler.h"
 #include "utils.h"
+#include <MAVLink.h>
 
 //Callsign
 #define CALLSIGN "VA2ETD"

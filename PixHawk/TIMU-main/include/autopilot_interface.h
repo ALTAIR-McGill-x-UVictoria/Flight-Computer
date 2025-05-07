@@ -162,9 +162,12 @@ class Autopilot_Interface
         void update_setpoint(mavlink_set_position_target_local_ned_t setpoint);
         void read_messages();
         int write_message(mavlink_message_t message);
+        
+        
     private:
         Linker *linker;
 };
+
 
 
 #endif
