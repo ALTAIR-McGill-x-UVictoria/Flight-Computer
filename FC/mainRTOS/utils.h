@@ -4,6 +4,7 @@
 #include <TeensyThreads.h>
 #include <SD.h>
 #include "Waveshare_10Dof-D.h"
+#include "MavLinkInterface/autopilot_interface.h"
 
 #define GPS_SERIAL Serial8
 
@@ -13,6 +14,11 @@ extern IMU_ST_SENSOR_DATA stGyroRawData;
 extern IMU_ST_SENSOR_DATA stAccelRawData;
 extern IMU_ST_SENSOR_DATA stMagnRawData;
 extern Threads::Mutex DAQmutex;
+
+// extern HighSpeedLogger logger(new SDClass(SD));
+extern HighSpeedLogger logger(&SD);
+extern Linker linker(logger);
+extern Autopilot_Interface pixhawk(&linker);
 
 // GPS data structure - moved to top before it's used
 struct GPSData {
@@ -90,5 +96,34 @@ extern radioPacket currentPacket;
 // Global GPS data instance
 extern GPSData currentGPSData;
 extern Threads::Mutex GPSmutex;
+
+/**
+ * Thread function to handle MAVLink communication with Pixhawk
+ * This function runs continuously and manages message exchange
+ * with the autopilot
+ */
+void MAVlinkHandler() {
+    // Initialize Serial2 for Pixhawk communication
+    Serial2.begin(921600); // Standard baud rate for Pixhawk telemetry
+    delay(100); // Short delay for initialization
+    
+    // Request data streams we're interested in
+    // These are common streams for flight data
+    pixhawk.request_data_stream(MAV_DATA_STREAM_RAW_SENSORS, 10, true);       // Raw sensor values
+    pixhawk.request_data_stream(MAV_DATA_STREAM_EXTENDED_STATUS, 5, true);    // Battery, GPS, etc.
+    pixhawk.request_data_stream(MAV_DATA_STREAM_POSITION, 5, true);           // Position data
+    pixhawk.request_data_stream(MAV_DATA_STREAM_EXTRA1, 10, true);            // Attitude data
+    pixhawk.request_data_stream(MAV_DATA_STREAM_EXTRA2, 5, true);             // VFR HUD data
+    
+    // Thread loop - runs continuously
+    while (true) {
+        // Read and process available MAVLink messages
+        pixhawk.read_messages(); 
+        
+        // Short delay to prevent CPU hogging
+        threads.yield();
+        delay(10);
+    }
+}
 
 #endif

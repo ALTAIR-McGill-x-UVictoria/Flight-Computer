@@ -1638,6 +1638,7 @@ these examples and explanations and extend them to suit your needs.
   #include <wiring.h>
  #endif
 #if defined(TEENSYDUINO)
+#include <Arduino.h>
 #include "SPI.h"
 #else
 #include <SPI.h>

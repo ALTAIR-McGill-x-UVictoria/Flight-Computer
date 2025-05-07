@@ -17,7 +17,7 @@ Autopilot_Interface pixhawk(&linker);
 // For timing the serial output
 unsigned long lastPrintTime = 0;
 const unsigned long PRINT_INTERVAL = 21;
-// const unsigned long PRINT_INTERVAL = 1000;
+// const unsigned long PRINT_INTERVAL = 2000;
 
 // Add at the top with other globals
 unsigned long lastStreamRequestTime = 0;
@@ -68,22 +68,22 @@ void printAllMavlinkData(const Mavlink_Messages& messages) {
             << ", Lon: " << messages.global_position_int.lon / 10000000.0
             << ", Alt: " << messages.global_position_int.alt / 1000.0 << " m" << endl;
   
-  // // High-res IMU
-  // SerialUSB << "--- HIGH-RES IMU ---" << endl;
-  // SerialUSB << "Acc (x,y,z): " << messages.highres_imu.xacc << ", " 
-  //           << messages.highres_imu.yacc << ", " 
-  //           << messages.highres_imu.zacc << " m/s^2" << endl;
-  // SerialUSB << "Gyro (x,y,z): " << messages.highres_imu.xgyro << ", " 
-  //           << messages.highres_imu.ygyro << ", " 
-  //           << messages.highres_imu.zgyro << " rad/s" << endl;
-  // SerialUSB << "Mag (x,y,z): " << messages.highres_imu.xmag << ", " 
-  //           << messages.highres_imu.ymag << ", " 
-  //           << messages.highres_imu.zmag << " gauss" << endl;
-  // SerialUSB << "Pressure: " << messages.highres_imu.abs_pressure << " hPa" << endl;
-  // SerialUSB << "Temperature: " << messages.highres_imu.temperature << " C" << endl;
-  // SerialUSB << "IMU fields_updated bitmap: " << messages.highres_imu.fields_updated << endl;
-  // SerialUSB << "Pressure updated: " << ((messages.highres_imu.fields_updated & 512) ? "YES" : "NO") << endl;
-  // SerialUSB << "Temperature updated: " << ((messages.highres_imu.fields_updated & 4096) ? "YES" : "NO") << endl;
+  // High-res IMU
+  SerialUSB << "--- HIGH-RES IMU ---" << endl;
+  SerialUSB << "Acc (x,y,z): " << messages.highres_imu.xacc << ", " 
+            << messages.highres_imu.yacc << ", " 
+            << messages.highres_imu.zacc << " m/s^2" << endl;
+  SerialUSB << "Gyro (x,y,z): " << messages.highres_imu.xgyro << ", " 
+            << messages.highres_imu.ygyro << ", " 
+            << messages.highres_imu.zgyro << " rad/s" << endl;
+  SerialUSB << "Mag (x,y,z): " << messages.highres_imu.xmag << ", " 
+            << messages.highres_imu.ymag << ", " 
+            << messages.highres_imu.zmag << " gauss" << endl;
+  SerialUSB << "Pressure: " << messages.highres_imu.abs_pressure << " hPa" << endl;
+  SerialUSB << "Temperature: " << messages.highres_imu.temperature << " C" << endl;
+  SerialUSB << "IMU fields_updated bitmap: " << messages.highres_imu.fields_updated << endl;
+  SerialUSB << "Pressure updated: " << ((messages.highres_imu.fields_updated & 512) ? "YES" : "NO") << endl;
+  SerialUSB << "Temperature updated: " << ((messages.highres_imu.fields_updated & 4096) ? "YES" : "NO") << endl;
   
   // // Attitude
   // SerialUSB << "--- ATTITUDE ---" << endl;
@@ -115,10 +115,10 @@ void printAllMavlinkData(const Mavlink_Messages& messages) {
   //           << ", Relative: " << messages.altitude.altitude_relative << " m" << endl;
   
   // GPS Data
-  SerialUSB << "--- GPS DATA ---" << endl;
-  SerialUSB << "Fix type: " << (int)messages.gps_raw.fix_type
-            << ", Satellites: " << (int)messages.gps_raw.satellites_visible
-            << ", HDOP: " << messages.gps_raw.eph/100.0 << endl;
+  // SerialUSB << "--- GPS DATA ---" << endl;
+  // SerialUSB << "Fix type: " << (int)messages.gps_raw.fix_type
+  //           << ", Satellites: " << (int)messages.gps_raw.satellites_visible
+  //           << ", HDOP: " << messages.gps_raw.eph/100.0 << endl;
   
   SerialUSB << "=====================" << endl << endl;
 }
@@ -176,6 +176,8 @@ void setup() {
   // pixhawk.request_data_stream(MAV_DATA_STREAM_EXTENDED_STATUS, 10);
   // pixhawk.request_data_stream(MAV_DATA_STREAM_POSITION, 10);
   // pixhawk.request_data_stream(MAV_DATA_STREAM_EXTRA1, 20); // Attitude data
+
+  pixhawk.request_data_stream(MAV_DATA_STREAM_ALL, 50); // Request all data streams at 50Hz
 }
 
 void loop() {
@@ -187,13 +189,19 @@ void loop() {
   
   // Periodically request data streams
   unsigned long currentTime = millis();
-  
+
+  // Request data stream every 2 seconds
+  if (currentTime - lastStreamRequestTime >= STREAM_REQUEST_INTERVAL) {
+    lastStreamRequestTime = currentTime;
+    pixhawk.request_data_stream(MAV_DATA_STREAM_ALL, 50); // Request all data streams at 50Hz
+  }
+
   // Only print data periodically to avoid flooding the serial monitor
   if (currentTime - lastPrintTime >= PRINT_INTERVAL) {
     lastPrintTime = currentTime;
     
     // Print all message data for debugging
-    // printAllMavlinkData(messages);
-    testPX4IMU(messages);
+    printAllMavlinkData(messages);
+    // testPX4IMU(messages);
   }
 }

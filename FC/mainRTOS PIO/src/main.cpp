@@ -9,6 +9,13 @@
 #include <TeensyThreads.h>
 #include "RadioTXHandler.h"
 #include "utils.h"
+#include <Arduino.h>
+// #include <common/mavlink.h>
+// #include <Streaming.h>
+
+// #include "HighSpeedLogger.h"
+// #include "linker.h"
+// #include "autopilot_interface.h"
 
 //Callsign
 #define CALLSIGN "VA2ETD"
@@ -53,6 +60,6 @@ void loop() {
     char packet[150];
     formRadioPacket(packet, sizeof(packet));
     radio.FCradioHandler(packet);
-    updateBuzzer();  // Keep only this line to update the buzzer state
+    // updateBuzzer();  // Keep only this line to update the buzzer state
     delay(250);
 }

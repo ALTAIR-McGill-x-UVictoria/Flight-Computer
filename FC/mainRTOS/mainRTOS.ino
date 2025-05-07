@@ -20,6 +20,11 @@
 
 // Singleton instances
 
+// MAVLink instance
+// HighSpeedLogger logger(new SDClass(SD));
+// Linker linker(logger);
+// Autopilot_Interface pixhawk(&linker);
+
 // Radio
 Radio radio;
 
@@ -46,6 +51,7 @@ void setup() {
     // Create threads
     threads.addThread(DAQacquire, 0);
     threads.addThread(GPSacquire, 1);
+    threads.addThread(MAVlinkHandler, 2);
 
     
 }
