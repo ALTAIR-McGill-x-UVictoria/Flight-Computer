@@ -10,7 +10,7 @@
 #define RFM95_INT 21
 
 //LoRa parameters definitions
-#define RF95_FREQ 433.0
+#define RF95_FREQ 905.0
 #define SF 8
 #define BW 125000
 #define TX_POWER 20

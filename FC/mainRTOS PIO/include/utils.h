@@ -7,6 +7,9 @@
 
 #define GPS_SERIAL Serial8
 
+// Define this macro to use altRadioPacket, otherwise radioPacket will be used
+// #define USE_ALT_PACKET
+
 // Global IMU data structures
 extern IMU_ST_ANGLES_DATA stAngles;
 extern IMU_ST_SENSOR_DATA stGyroRawData;
@@ -35,8 +38,6 @@ void sensorSetup();
 void calibrateIMU();
 void DAQacquire();
 void GPSacquire();
-void playBuzzer(const String& jingleType);
-void updateBuzzer();
 void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2);
 void photodiodeSetup();
 
@@ -48,6 +49,17 @@ bool parseGPGGA(const char* ggaString, GPSData& data);
 // Radio packet functions
 void formRadioPacket(char* packet, size_t packet_size);
 void updateRadioPacket(int rssi = 0, int snr = 0);
+
+// New functions for altRadioPacket
+void formAltRadioPacket(char* packet, size_t packet_size);
+void updateAltRadioPacket(int rssi = 0, int snr = 0);
+
+// Pixhawk functions
+void PixHawkAcquire();
+void PixHawkLoop();
+
+void MAVsetup();
+void MAVLinkAcquire();
 
 extern String currentFilePath;
 
@@ -85,7 +97,120 @@ struct radioPacket {
 
 };
 
+struct altRadioPacket {
+    // Communication data
+    int ack;
+    int16_t RSSI;
+    int SNR;
+    // Time (FC)
+    uint64_t fc_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
+    uint32_t fc_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
+    // GPS data 1 (FC)
+    float gpsLat1;
+    float gpsLon1;
+    float gpsAlt1;
+    float gpsSpeed1;
+    float gpsTime1;
+    // GPS data 2 (Pixhawk)
+    float gpsLat2;
+    float gpsLon2;
+    float gpsAlt2;
+    float gpsSpeed2;
+    float gpsTime2;
+    // IMU data 1 (FC)
+    float absPressure1;
+    float temperature1;
+    float altitude1;
+    // IMU data 2 (Pixhawk)
+    float absPressure2;
+    float temperature2;
+    float diffPressure2;
+    // FC System status
+    bool SDStatus;
+    bool actuatorStatus;
+    // Pixhawk System status
+    bool logging_active;
+    uint32_t write_rate;
+    uint32_t space_left;
+    // Pixhawk System time
+    uint64_t pix_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
+    uint32_t pix_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
+    // Vibration data
+    float vibe_x;
+    float vibe_y;
+    float vibe_z;
+    uint32_t clipping_x;
+    uint32_t clipping_y;
+    uint32_t clipping_z;
+    // Navigation data
+    float gpsBearing;
+    float gpsBearingMagnetic;
+    float gpsBearingTrue;
+    float gpsBearingGroundSpeed;
+    float gpsBearingGroundSpeedMagnetic;
+    float gpsBearingGroundSpeedTrue;
+    // Photodiode data
+    int photodiodeValue1;
+    int photodiodeValue2;
+};
+
+struct MavLinkMessage {
+    // Attitude data
+    float roll;
+    float pitch;
+    float yaw;
+    // GPS data
+    int32_t lat;
+    int32_t lon;
+    int32_t alt;
+    uint8_t satellites;
+    // battery info
+    float voltage;
+    float current;
+    int8_t remaining;
+    // VHR HUD data
+    float airspeed;
+    float groundspeed;
+    float heading;
+    float throttle;
+    float alt_vfr;
+    float climb;
+    // HIGH-RES IMU data
+    float acc_x;
+    float acc_y;
+    float acc_z;
+    float xgyro;
+    float ygyro;
+    float zgyro;
+    float xmag;
+    float ymag;
+    float zmag;
+    float abs_pressure;
+    float diff_pressure;
+    float temperature;
+    // System Time
+    uint64_t unix_time_usec;
+    uint32_t boot_time_ms;
+    // Logging Status
+    bool logging_active;
+    uint32_t write_rate;
+    uint32_t space_left;
+    // Arm status
+    bool armed; // missing implementation in MavlinkDecoder
+    // Vibration data
+    float vibe_x;
+    float vibe_y;
+    float vibe_z;
+    uint32_t clipping_x;
+    uint32_t clipping_y;
+    uint32_t clipping_z;
+};
+
+#ifdef USE_ALT_PACKET
+extern altRadioPacket currentPacket;
+#else
 extern radioPacket currentPacket;
+#endif
 
 // Global GPS data instance
 extern GPSData currentGPSData;

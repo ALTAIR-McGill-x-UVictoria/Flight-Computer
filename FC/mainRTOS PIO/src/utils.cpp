@@ -3,6 +3,11 @@
 #include "config.h"
 #include <stdio.h>
 
+#include "MavlinkDecoder.h"
+#include "MAVLink.h"
+#include "Streaming.h"
+#include "RadioTXHandler.h"
+
 // Define global variables
 IMU_ST_ANGLES_DATA stAngles;
 IMU_ST_SENSOR_DATA stGyroRawData;
@@ -21,52 +26,28 @@ float fYawOffset = 0.0f;
 
 String currentFilePath;
 
+// Mutex
 Threads::Mutex DAQmutex;
-GPSData currentGPSData;
 Threads::Mutex GPSmutex;
+Threads::Mutex MAVLinkMutex;
 
+// Packet structure
+altRadioPacket currentAltPacket;
 radioPacket currentPacket;
+
+// GPS data structure
+GPSData currentGPSData;
+
+// Radio radio;
+
+// Create an instance of the MAVLink decoder
+MavlinkDecoder mavlink;
+MavLinkMessage message;
+
 
 // Define buzzer pin
 #define BUZZER_PIN 22
 
-// Structure to hold tone pattern data
-struct ToneStep {
-    int frequency;  // frequency in Hz, 0 means silence
-    int duration;   // duration in ms
-};
-
-// Jingle patterns - define up to 8 steps for each jingle
-const ToneStep calibrationJingle[8] = {
-    {NOTE_C4, 100}, {0, 50}, {NOTE_E4, 100}, {0, 50}, 
-    {NOTE_G4, 100}, {0, 100}, {NOTE_C5, 500}, {0, 0}
-};
-
-const ToneStep successJingle[8] = {
-    {NOTE_C4, 150}, {0, 50}, {NOTE_E4, 150}, {0, 50}, 
-    {NOTE_G4, 300}, {0, 0}, {0, 0}, {0, 0}
-};
-
-const ToneStep errorJingle[8] = {
-    {NOTE_G4, 300}, {0, 50}, {NOTE_E4, 150}, {0, 50}, 
-    {NOTE_C4, 100}, {0, 0}, {0, 0}, {0, 0}
-};
-
-const ToneStep warningJingle[8] = {
-    {NOTE_A4, 200}, {0, 200}, {NOTE_A4, 200}, {0, 0}, 
-    {0, 0}, {0, 0}, {0, 0}, {0, 0}
-};
-
-// Global variables for non-blocking buzzer control
-bool buzzerActive = false;
-unsigned long buzzerStartTime = 0;
-String currentJingle = "";
-int jingleStep = 0;
-unsigned long lastBeepTime = 0;
-
-// Global variables for tracking jingle playback state
-const ToneStep* currentPattern = nullptr;
-int maxSteps = 0;
 
 bool SDSetup() {
     // Code will now recognize BUILTIN_SDCARD
@@ -96,9 +77,6 @@ void SDWrite(const String& log) {
 void calibrateIMU() {
     // Acquire mutex to prevent data race with DAQacquire thread
     DAQmutex.lock();
-    
-    // Play calibration jingle to indicate start
-    playBuzzer("calibration");
     
     // Define number of samples and interval
     const int numSamples = 15;
@@ -158,8 +136,6 @@ void calibrateIMU() {
             String(fPitchOffset) + ", " + 
             String(fYawOffset));
             
-    // Play success jingle after calibration
-    playBuzzer("success");
 }
 
 void sensorSetup() {
@@ -276,6 +252,91 @@ void formRadioPacket(char* packet, size_t packet_size) {
     DAQmutex.unlock();
 }
 
+// New functions for altRadioPacket
+void formAltRadioPacket(char* packet, size_t packet_size) {
+    DAQmutex.lock();
+    GPSmutex.lock();
+    MAVLinkMutex.lock(); // Lock MAVLink data access
+
+    memset(packet, 0, packet_size);
+
+    int written = snprintf(packet, packet_size,
+        "%d,%d,%d," // ack, RSSI, SNR
+        "%llu,%lu," // FC time: fc_unix_time_usec, fc_boot_time_ms
+        "%.6f,%.6f,%.2f,%.2f,%.2f," // FC GPS: lat1, lon1, alt1, speed1, time1
+        "%.6f,%.6f,%.2f,%.2f,%.2f," // Pixhawk GPS: lat2, lon2, alt2, speed2, time2
+        "%.2f,%.2f,%.2f," // FC IMU: absPressure1, temperature1, altitude1
+        "%.2f,%.2f,%.2f," // Pixhawk IMU: absPressure2, temperature2, diffPressure2
+        "%d,%d," // FC Status: SDStatus, actuatorStatus
+        "%d,%lu,%lu," // Pixhawk Status: logging_active, write_rate, space_left
+        "%llu,%lu," // Pixhawk Time: pix_unix_time_usec, pix_boot_time_ms
+        "%.2f,%.2f,%.2f,%lu,%lu,%lu," // Vibration: vibe_x, vibe_y, vibe_z, clip_x, clip_y, clip_z
+        "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f," // Navigation: gpsBearing, gpsBearingMagnetic, gpsBearingTrue, gpsBearingGroundSpeed, gpsBearingGroundSpeedMagnetic, gpsBearingGroundSpeedTrue
+        "%d,%d", // Photodiodes: value1, value2
+        currentAltPacket.ack,
+        currentAltPacket.RSSI,
+        currentAltPacket.SNR,
+        currentAltPacket.fc_unix_time_usec,
+        currentAltPacket.fc_boot_time_ms,
+        currentAltPacket.gpsLat1,
+        currentAltPacket.gpsLon1,
+        currentAltPacket.gpsAlt1,
+        currentAltPacket.gpsSpeed1,
+        currentAltPacket.gpsTime1,
+        currentAltPacket.gpsLat2,
+        currentAltPacket.gpsLon2,
+        currentAltPacket.gpsAlt2,
+        currentAltPacket.gpsSpeed2,
+        currentAltPacket.gpsTime2,
+        currentAltPacket.absPressure1,
+        currentAltPacket.temperature1,
+        currentAltPacket.altitude1,
+        currentAltPacket.absPressure2,
+        currentAltPacket.temperature2,
+        currentAltPacket.diffPressure2,
+        currentAltPacket.SDStatus ? 1 : 0,
+        currentAltPacket.actuatorStatus ? 1 : 0,
+        currentAltPacket.logging_active ? 1 : 0,
+        currentAltPacket.write_rate,
+        currentAltPacket.space_left,
+        currentAltPacket.pix_unix_time_usec,
+        currentAltPacket.pix_boot_time_ms,
+        currentAltPacket.vibe_x,
+        currentAltPacket.vibe_y,
+        currentAltPacket.vibe_z,
+        currentAltPacket.clipping_x,
+        currentAltPacket.clipping_y,
+        currentAltPacket.clipping_z,
+        currentAltPacket.gpsBearing,
+        currentAltPacket.gpsBearingMagnetic,
+        currentAltPacket.gpsBearingTrue,
+        currentAltPacket.gpsBearingGroundSpeed,
+        currentAltPacket.gpsBearingGroundSpeedMagnetic,
+        currentAltPacket.gpsBearingGroundSpeedTrue,
+        currentPacket.photodiodeValue1,
+        currentPacket.photodiodeValue2
+    );
+
+    // Ensure proper termination
+    if (written > 0 && written < packet_size) {
+        packet[written] = '\n';  // Add newline
+        packet[written + 1] = '\0';  // Ensure null termination
+    } else if (written >= packet_size) {
+        // Packet was truncated, ensure null termination at the end of the buffer
+        packet[packet_size - 1] = '\0';
+        // Optionally log an error or indicate truncation
+        // SDWrite("Error: altRadioPacket truncated");
+    }
+
+    MAVLinkMutex.unlock();
+    GPSmutex.unlock();
+    DAQmutex.unlock();
+}
+
+// void radioSetup(){
+//     radio.setup();
+// }
+
 void updateRadioPacket(int rssi, int snr) {
     DAQmutex.lock();
     GPSmutex.lock();
@@ -318,6 +379,90 @@ void updateRadioPacket(int rssi, int snr) {
     currentPacket.gpsTime = hours * 10000 + minutes * 100 + seconds;
     currentPacket.gpsValid = currentGPSData.valid;
     
+    GPSmutex.unlock();
+    DAQmutex.unlock();
+}
+
+void updateAltRadioPacket(int rssi, int snr) {
+    DAQmutex.lock();
+    GPSmutex.lock();
+    MAVLinkMutex.lock(); // Lock MAVLink data access
+
+    // Communication data
+    currentAltPacket.RSSI = rssi;
+    currentAltPacket.SNR = snr;
+    // currentPacket.ack is typically set by the reply parsing in FCradioHandler
+
+    // Time (FC)
+    currentAltPacket.fc_boot_time_ms = millis(); // FC boot time
+    currentAltPacket.fc_unix_time_usec = 0; // Placeholder: FC Unix time (requires RTC or GPS sync)
+
+    // GPS data 1 (FC)
+    currentAltPacket.gpsLat1 = currentGPSData.latitude;
+    currentAltPacket.gpsLon1 = currentGPSData.longitude;
+    currentAltPacket.gpsAlt1 = currentGPSData.altitude; // Altitude from GPS
+    currentAltPacket.gpsSpeed1 = currentGPSData.speed;  // Speed in km/h
+
+    // Convert FC GPS time from UTC to local time (e.g., Eastern Time UTC-4/UTC-5)
+    float fc_utcTime = currentGPSData.time;
+    int fc_hours = int(fc_utcTime / 10000);
+    int fc_minutes = int((fc_utcTime - fc_hours * 10000) / 100);
+    float fc_seconds = fc_utcTime - fc_hours * 10000 - fc_minutes * 100;
+    int timeZoneOffset = -4; // Example: EDT (UTC-4). Adjust as needed.
+    fc_hours = (fc_hours + timeZoneOffset + 24) % 24;
+    currentAltPacket.gpsTime1 = fc_hours * 10000 + fc_minutes * 100 + fc_seconds;
+
+    // GPS data 2 (Pixhawk) - from MAVLink message
+    currentAltPacket.gpsLat2 = message.lat / 1.0e7f; // Convert from int32 (degrees * 1E7)
+    currentAltPacket.gpsLon2 = message.lon / 1.0e7f; // Convert from int32 (degrees * 1E7)
+    currentAltPacket.gpsAlt2 = message.alt_vfr;      // Altitude from VFR_HUD (meters MSL)
+    currentAltPacket.gpsSpeed2 = message.groundspeed * 3.6f; // Convert m/s to km/h
+    currentAltPacket.gpsTime2 = 0.0f; // Placeholder: Needs proper MAVLink GPS time source
+
+    // IMU data 1 (FC)
+    currentAltPacket.absPressure1 = s32PressureVal / 100.0f;
+    currentAltPacket.temperature1 = s32TemperatureVal / 100.0f;
+    currentAltPacket.altitude1 = s32AltitudeVal / 100.0f; // FC Barometric altitude
+
+    // IMU data 2 (Pixhawk) - from MAVLink message
+    currentAltPacket.absPressure2 = message.abs_pressure; // hPa
+    currentAltPacket.temperature2 = message.temperature;  // Celsius
+    currentAltPacket.diffPressure2 = message.diff_pressure; // hPa
+
+    // FC System status
+    currentAltPacket.SDStatus = SD.begin(BUILTIN_SDCARD); // Check SD status dynamically
+    currentAltPacket.actuatorStatus = false; // Placeholder: Update with actual actuator status
+
+    // Pixhawk System status - from MAVLink message
+    currentAltPacket.logging_active = message.logging_active;
+    currentAltPacket.write_rate = message.write_rate;     // Bytes/s
+    currentAltPacket.space_left = message.space_left;     // MiB
+
+    // Pixhawk System time
+    currentAltPacket.pix_unix_time_usec = message.unix_time_usec;
+    currentAltPacket.pix_boot_time_ms = message.boot_time_ms;
+
+    // Vibration data - from MAVLink message
+    currentAltPacket.vibe_x = message.vibe_x;
+    currentAltPacket.vibe_y = message.vibe_y;
+    currentAltPacket.vibe_z = message.vibe_z;
+    currentAltPacket.clipping_x = message.clipping_x;
+    currentAltPacket.clipping_y = message.clipping_y;
+    currentAltPacket.clipping_z = message.clipping_z;
+
+    // Navigation data
+    currentAltPacket.gpsBearing = currentGPSData.course; // FC GPS course (true)
+    currentAltPacket.gpsBearingMagnetic = message.heading; // Pixhawk compass heading
+    currentAltPacket.gpsBearingTrue = currentGPSData.course; // FC GPS course (true)
+    currentAltPacket.gpsBearingGroundSpeed = currentGPSData.speed; // FC ground speed (km/h)
+    currentAltPacket.gpsBearingGroundSpeedMagnetic = message.groundspeed * 3.6f; // Pixhawk ground speed (km/h)
+    currentAltPacket.gpsBearingGroundSpeedTrue = currentGPSData.speed; // FC ground speed (km/h)
+
+    // Photodiode data
+    currentAltPacket.photodiodeValue1 = photodiodeValue1;
+    currentAltPacket.photodiodeValue2 = photodiodeValue2;
+
+    MAVLinkMutex.unlock();
     GPSmutex.unlock();
     DAQmutex.unlock();
 }
@@ -457,78 +602,6 @@ bool parseGPGGA(const char* ggaString, GPSData& data) {
     return true;
 }
 
-// Buzzer handler function that plays different jingles
-void playBuzzer(const String& jingleType) {
-    // If buzzer is already active, don't interrupt current jingle
-    if (buzzerActive) return;
-    
-    currentJingle = jingleType;
-    jingleStep = 0;
-    buzzerActive = true;
-    lastBeepTime = millis();
-    
-    // Select the appropriate jingle pattern
-    if (jingleType == "calibration") {
-        currentPattern = calibrationJingle;
-        maxSteps = 8;
-    }
-    else if (jingleType == "success") {
-        currentPattern = successJingle;
-        maxSteps = 6;
-    }
-    else if (jingleType == "error") {
-        currentPattern = errorJingle;
-        maxSteps = 6;
-    }
-    else if (jingleType == "warning") {
-        currentPattern = warningJingle;
-        maxSteps = 4;
-    }
-    else {
-        // Default simple beep
-        currentPattern = warningJingle;
-        maxSteps = 2;
-    }
-    
-    // Start playing the first tone
-    if (currentPattern[0].frequency > 0) {
-        tone(BUZZER_PIN, currentPattern[0].frequency);
-    } else {
-        noTone(BUZZER_PIN);
-    }
-    
-    Serial.print("Playing jingle: ");
-    Serial.println(jingleType);
-}
-
-// Function to update buzzer state (call this in main loop)
-void updateBuzzer() {
-    if (!buzzerActive || currentPattern == nullptr) return;
-    
-    unsigned long currentTime = millis();
-    
-    // Check if it's time to move to the next step
-    if (currentTime - lastBeepTime >= currentPattern[jingleStep].duration) {
-        // Move to next step
-        jingleStep++;
-        
-        // Check if we've reached the end of the pattern
-        if (jingleStep >= maxSteps || currentPattern[jingleStep].duration == 0) {
-            noTone(BUZZER_PIN);
-            buzzerActive = false;
-            return;
-        }
-        
-        // Play the next tone (or silence)
-        if (currentPattern[jingleStep].frequency > 0) {
-            tone(BUZZER_PIN, currentPattern[jingleStep].frequency);
-        } else {
-            noTone(BUZZER_PIN);
-        }
-        
-        lastBeepTime = currentTime;
-    }
-}
 
 void photodiodeSetup() {
     return;
@@ -537,4 +610,23 @@ void photodiodeSetup() {
 void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2) {
     *photodiodeValue1 = analogRead(26);
     *photodiodeValue2 = analogRead(27);
+}
+
+void MAVsetup(){
+    mavlink.begin(921600);
+}
+
+void MAVLinkAcquire(){
+    // MavLink thread function
+    while(1){
+        mavlink.update();
+        mavlink.getAttitude(message.roll, message.pitch, message.yaw);
+        mavlink.getGPSInfo(message.lat, message.lon, message.alt, message.satellites);
+        mavlink.getBatteryInfo(message.voltage, message.current, message.remaining);
+        mavlink.getVfrHudData(message.airspeed, message.groundspeed, message.heading, message.throttle, message.alt_vfr, message.climb);
+        mavlink.getHighResImu(message.acc_x, message.acc_y, message.acc_z, message.xgyro, message.ygyro, message.zgyro, message.xmag, message.ymag, message.zmag, message.abs_pressure, message.diff_pressure, message.temperature);
+        mavlink.getSystemTime(message.unix_time_usec, message.boot_time_ms);
+        mavlink.getLoggingStats(message.write_rate, message.space_left);
+        mavlink.getVibrationData(message.vibe_x, message.vibe_y, message.vibe_z, message.clipping_x, message.clipping_y, message.clipping_z);
+    }
 }

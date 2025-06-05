@@ -3,6 +3,7 @@
 #include <Streaming.h>
 #include <SPI.h>
 #include <SD.h>
+#include <TeensyThreads.h>
 
 #define VERSION "0.0.1"
 
@@ -163,6 +164,22 @@ void testPX4IMU(const Mavlink_Messages& messages) {
             << (fresh_imu ? messages.highres_imu.zgyro : prev_values[11]) << endl;
 }
 
+void PXthread(){
+  while(1){
+    pixhawk.read_messages();
+    Mavlink_Messages messages = pixhawk.current_messages;
+
+    unsigned long currentTime = millis();
+
+  // Only print data periodically to avoid flooding the serial monitor
+  if (currentTime - lastPrintTime >= PRINT_INTERVAL) {
+    lastPrintTime = currentTime;
+    // printAllMavlinkData(messages);
+    testPX4IMU(messages);
+  }
+  }
+}
+
 void setup() {
   Serial2.begin(921600);
   SerialUSB.begin(921600);
@@ -178,6 +195,7 @@ void setup() {
   // pixhawk.request_data_stream(MAV_DATA_STREAM_EXTRA1, 20); // Attitude data
 
   pixhawk.request_data_stream(MAV_DATA_STREAM_ALL, 50); // Request all data streams at 50Hz
+  // threads.addThread(PXthread);
 }
 
 void loop() {
@@ -191,17 +209,17 @@ void loop() {
   unsigned long currentTime = millis();
 
   // Request data stream every 2 seconds
-  if (currentTime - lastStreamRequestTime >= STREAM_REQUEST_INTERVAL) {
-    lastStreamRequestTime = currentTime;
-    pixhawk.request_data_stream(MAV_DATA_STREAM_ALL, 50); // Request all data streams at 50Hz
-  }
+  // if (currentTime - lastStreamRequestTime >= STREAM_REQUEST_INTERVAL) {
+  //   lastStreamRequestTime = currentTime;
+  //   pixhawk.request_data_stream(MAV_DATA_STREAM_ALL, 50); // Request all data streams at 50Hz
+  // }
 
   // Only print data periodically to avoid flooding the serial monitor
   if (currentTime - lastPrintTime >= PRINT_INTERVAL) {
     lastPrintTime = currentTime;
     
     // Print all message data for debugging
-    printAllMavlinkData(messages);
-    // testPX4IMU(messages);
+    // printAllMavlinkData(messages);
+    testPX4IMU(messages);
   }
 }

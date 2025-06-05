@@ -7,7 +7,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <mutex>
+// #include <mutex>
 
 #include "linker.h"
 
@@ -165,6 +165,13 @@ class Autopilot_Interface
         
         // Request a specific data stream at a given rate
         void request_data_stream(uint8_t stream_id, uint16_t rate, bool start = true);
+        
+        /**
+         * Send arm/disarm command to the autopilot
+         * @param arm 1 to arm, 0 to disarm
+         * @return true if command was sent successfully
+         */
+        bool arm_disarm(uint8_t arm);
         
     private:
         Linker *linker;

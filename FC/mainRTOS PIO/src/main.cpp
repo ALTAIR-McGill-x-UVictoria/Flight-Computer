@@ -25,10 +25,13 @@
 #define GPS_BAUD 9600
 #define BUZZER_PIN 22
 
+#define USE_ALT_PACKET 1
+
 // Singleton instances
 
 // Radio
 Radio radio;
+char packet[150];
 
 void setup() {
     // Initialize serial for debugging
@@ -45,6 +48,9 @@ void setup() {
     
     // GPS setup
     GPS_SERIAL.begin(GPS_BAUD);
+
+    // Pixhawk setup
+    MAVsetup();
     
     // Initialize GPS data structure
     currentGPSData.valid = false;
@@ -53,13 +59,28 @@ void setup() {
     // Create threads
     threads.addThread(DAQacquire, 0);
     threads.addThread(GPSacquire, 1);
+    threads.addThread(MAVLinkAcquire, 2);
 }
 
 void loop() {
-    updateRadioPacket(radio.lastRSSI, radio.lastSNR);
-    char packet[150];
-    formRadioPacket(packet, sizeof(packet));
+    
+    if (USE_ALT_PACKET) {
+        updateAltRadioPacket(radio.lastRSSI, radio.lastSNR);
+        formAltRadioPacket(packet, sizeof(packet));
+        
+    } else {
+        updateRadioPacket(radio.lastRSSI, radio.lastSNR);
+        formRadioPacket(packet, sizeof(packet));
+        
+    }
+    // updateRadioPacket(radio.lastRSSI, radio.lastSNR);
+    // char packet[150];
+    // formRadioPacket(packet, sizeof(packet));
+    
     radio.FCradioHandler(packet);
-    // updateBuzzer();  // Keep only this line to update the buzzer state
+
+
     delay(250);
+
+
 }

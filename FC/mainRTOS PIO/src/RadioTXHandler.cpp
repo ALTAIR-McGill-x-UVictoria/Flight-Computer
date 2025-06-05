@@ -5,7 +5,8 @@
 
 #define BUZZER_PIN 22
 
-extern radioPacket currentPacket;  // Access the global struct
+// extern altRadioPacket currentAltPacket;
+// extern radioPacket currentPacket;
 
 Radio::Radio() : timeout(500) {
     rf95 = new RH_RF95(RFM95_CS, RFM95_INT);
@@ -86,7 +87,6 @@ void Radio::FCradioHandler(const char* packet) {
             
             switch (command) {
             case 1:
-                playBuzzer("warning");  // Play buzzer with warning pattern
                 break;
             // other cases...
             case 6:

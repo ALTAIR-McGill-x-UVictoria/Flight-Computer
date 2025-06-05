@@ -284,3 +284,33 @@ void Autopilot_Interface::request_data_stream(uint8_t stream_id, uint16_t rate, 
     SerialUSB << "Requesting data stream ID " << (int)stream_id 
               << " at " << rate << "Hz (start=" << start << ")" << endl;
 }
+
+// Add this function implementation:
+
+bool Autopilot_Interface::arm_disarm(uint8_t arm)
+{
+    // Initialize the message
+    mavlink_message_t message;
+    
+    // Create the COMMAND_LONG message for arming/disarming
+    mavlink_msg_command_long_pack(
+        255,                       // System ID (typically ground station uses 255)
+        0,                         // Component ID (0 for ground station)
+        &message,                  // The message to populate
+        current_messages.sysid,    // Target system ID (the Pixhawk)
+        current_messages.compid,   // Target component ID
+        MAV_CMD_COMPONENT_ARM_DISARM, // Command ID (400 for arm/disarm)
+        0,                         // Confirmation (first time sending = 0)
+        arm,                       // Param1: 1 to arm, 0 to disarm
+        0,                         // Param2: Force arming/disarming (0 = normal, 21196 = force)
+        0, 0, 0, 0, 0              // Param3-7 (not used for this command)
+    );
+    
+    // Send the message
+    bool success = linker->write_message(message);
+    
+    // Debug output
+    SerialUSB << "Sending arm command (" << (int)arm << "), success: " << success << endl;
+    
+    return success;
+}
