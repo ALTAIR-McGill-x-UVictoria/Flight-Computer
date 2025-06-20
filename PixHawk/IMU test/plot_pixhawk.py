@@ -6,12 +6,15 @@ from collections import deque
 import time
 import threading
 import queue
+import csv
+import re
 
 # Configuration
-PORT = 'COM5'
-BAUD_RATE = 115200  # Adjust based on your serial configuration
+PORT = 'COM6'
+BAUD_RATE = 115200   # Adjust based on your serial configuration
 BUFFER_SIZE = 500   # Number of data points to display
-UPDATE_INTERVAL = 20  # Update plot every 20ms (50 FPS) for smoother real-time display
+UPDATE_INTERVAL = 1  # Update plot everpriny 20ms (50 FPS) for smoother real-time display
+CSV_FILENAME = 'attitude_data.csv'
 
 # Create figure and subplots
 plt.style.use('dark_background')  # Better for real-time visualization
@@ -24,18 +27,7 @@ time_data = deque(maxlen=BUFFER_SIZE)
 roll_data = deque(maxlen=BUFFER_SIZE)
 pitch_data = deque(maxlen=BUFFER_SIZE)
 yaw_data = deque(maxlen=BUFFER_SIZE)
-# Angular velocities (rollspeed, pitchspeed, yawspeed)
-rollspd_data = deque(maxlen=BUFFER_SIZE)
-pitchspd_data = deque(maxlen=BUFFER_SIZE)
-yawspd_data = deque(maxlen=BUFFER_SIZE)
-# Linear accelerations (xacc, yacc, zacc)
-xacc_data = deque(maxlen=BUFFER_SIZE)
-yacc_data = deque(maxlen=BUFFER_SIZE)
-zacc_data = deque(maxlen=BUFFER_SIZE)
-# Gyroscope data (xgyro, ygyro, zgyro)
-xgyro_data = deque(maxlen=BUFFER_SIZE)
-ygyro_data = deque(maxlen=BUFFER_SIZE)
-zgyro_data = deque(maxlen=BUFFER_SIZE)
+
 
 # Create a queue for thread-safe data passing
 data_queue = queue.Queue()
@@ -49,85 +41,59 @@ att_lines.append(ax1.plot([], [], label='Roll', color='r')[0])
 att_lines.append(ax1.plot([], [], label='Pitch', color='g')[0])
 att_lines.append(ax1.plot([], [], label='Yaw', color='b')[0])
 
-# Angular velocity plot
-angvel_lines = []
-angvel_lines.append(ax2.plot([], [], label='Roll Speed', color='r')[0])
-angvel_lines.append(ax2.plot([], [], label='Pitch Speed', color='g')[0])
-angvel_lines.append(ax2.plot([], [], label='Yaw Speed', color='b')[0])
-
-# Acceleration plot
-acc_lines = []
-acc_lines.append(ax3.plot([], [], label='X Accel', color='r')[0])
-acc_lines.append(ax3.plot([], [], label='Y Accel', color='g')[0])
-acc_lines.append(ax3.plot([], [], label='Z Accel', color='b')[0])
-
-# Gyroscope plot
-gyro_lines = []
-gyro_lines.append(ax4.plot([], [], label='X Gyro', color='r')[0])
-gyro_lines.append(ax4.plot([], [], label='Y Gyro', color='g')[0])
-gyro_lines.append(ax4.plot([], [], label='Z Gyro', color='b')[0])
 
 # Configure plots
 ax1.set_title('Attitude (rad)')
 ax1.set_xlabel('Time (s)')
-ax1.set_ylabel('Angle (rad)')
+ax1.set_ylabel('Angle (deg)')
 ax1.legend(loc='upper left')
 ax1.grid(True)
 
-ax2.set_title('Angular Velocity (rad/s)')
-ax2.set_xlabel('Time (s)')
-ax2.set_ylabel('Angular Velocity (rad/s)')
-ax2.legend(loc='upper left')
-ax2.grid(True)
-
-ax3.set_title('Acceleration (m/s²)')
-ax3.set_xlabel('Time (s)')
-ax3.set_ylabel('Acceleration (m/s²)')
-ax3.legend(loc='upper left')
-ax3.grid(True)
-
-ax4.set_title('Gyroscope (rad/s)')
-ax4.set_xlabel('Time (s)')
-ax4.set_ylabel('Angular Velocity (rad/s)')
-ax4.legend(loc='upper left')
-ax4.grid(True)
-
 # Set fixed y-axis limits for more stable visualization
 # These can be adjusted based on typical value ranges
-ax1.set_ylim(-3.5, 3.5)  # Attitude in radians
-ax2.set_ylim(-2.0, 2.0)  # Angular velocity
-ax3.set_ylim(-20, 20)    # Acceleration
-ax4.set_ylim(-2.0, 2.0)  # Gyroscope
+ax1.set_ylim(-180, 180)  # Attitude in radians
+
 
 # Adjust layout
 plt.tight_layout()
 plt.subplots_adjust(top=0.9)
 
+# Open CSV file for writing attitude data
+csv_file = open(CSV_FILENAME, 'w', newline='')
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(['timestamp', 'roll', 'pitch', 'yaw'])  # header
+
 # Thread function to read serial data
 def read_serial_data(ser):
     global stop_thread
-    start_time = time.time()
-    
+    # Use local variables for roll, pitch, yaw, timestamp
+    roll = pitch = yaw = None
+    timestamp = None
     while not stop_thread:
         if ser.in_waiting > 0:
             try:
-                # Read and decode the line
-                line = ser.readline().decode('utf-8').strip()
-                
-                # Parse the CSV data
-                values = list(map(float, line.split(',')))
-                
-                # Ensure we have all 12 values
-                if len(values) == 12:
-                    current_time = time.time() - start_time
-                    # Put the data in the queue
-                    data_queue.put((current_time, values))
-                    
+                line = ser.readline().decode('utf-8', errors='ignore').strip()
+                # print(line)
+                parsed = parse_line(line)
+                if parsed:
+                    ts = parsed
+                    csv_writer.writerow([ts])
+                    csv_file.flush()
+                    print(f"Received: {ts}")
+                    # Put in queue for plotting (time in seconds, values)
+                    # data_queue.put((timestamp / 1e4, [roll, pitch, yaw]))
+                    # Reset for next set
+                    roll = pitch = yaw = None
+                    timestamp = None
             except Exception as e:
                 print(f"Error reading serial data: {e}")
-                
-        # Small sleep to prevent CPU hogging
-        time.sleep(0.001)
+        # time.sleep(0.001)
+
+def parse_line(line):
+    timestamp = int(time.time())
+    return timestamp
+    exit()
+    return None
 
 try:
     # Open serial port
@@ -149,61 +115,24 @@ try:
         while not data_queue.empty():
             new_data = True
             current_time, values = data_queue.get()
-            
             time_data.append(current_time)
-            
-            # Extract and store values
             roll_data.append(values[0])
             pitch_data.append(values[1])
             yaw_data.append(values[2])
-            
-            rollspd_data.append(values[3])
-            pitchspd_data.append(values[4])
-            yawspd_data.append(values[5])
-            
-            xacc_data.append(values[6])
-            yacc_data.append(values[7])
-            zacc_data.append(values[8])
-            
-            xgyro_data.append(values[9])
-            ygyro_data.append(values[10])
-            zgyro_data.append(values[11])
-        
-        # Only update plots if we have new data
+
         if new_data:
-            # Update plot data
             time_array = list(time_data)
-            
-            # Update attitude plot
             att_lines[0].set_data(time_array, roll_data)
             att_lines[1].set_data(time_array, pitch_data)
             att_lines[2].set_data(time_array, yaw_data)
-            
-            # Update angular velocity plot
-            angvel_lines[0].set_data(time_array, rollspd_data)
-            angvel_lines[1].set_data(time_array, pitchspd_data)
-            angvel_lines[2].set_data(time_array, yawspd_data)
-            
-            # Update acceleration plot
-            acc_lines[0].set_data(time_array, xacc_data)
-            acc_lines[1].set_data(time_array, yacc_data)
-            acc_lines[2].set_data(time_array, zacc_data)
-            
-            # Update gyro plot
-            gyro_lines[0].set_data(time_array, xgyro_data)
-            gyro_lines[1].set_data(time_array, ygyro_data)
-            gyro_lines[2].set_data(time_array, zgyro_data)
-            
-            # Adjust x-axis to fill entire plot width with available data
-            for ax in [ax1, ax2, ax3, ax4]:
-                if time_array:
-                    # Use full range of available data
-                    xmin = time_array[0]  # Start from earliest data point 
-                    xmax = time_array[-1] + 0.2  # Add small padding
-                    ax.set_xlim(xmin, xmax)
-        
-        # Return all lines that need to be updated
-        return att_lines + angvel_lines + acc_lines + gyro_lines
+            # Only update ax1
+            if time_array:
+                xmin = time_array[0]
+                xmax = time_array[-1] + 0.2
+                ax1.set_xlim(xmin, xmax)
+                # Optionally, autoscale y if needed:
+                # ax1.set_ylim(min(min(roll_data), min(pitch_data), min(yaw_data))-5, max(max(roll_data), max(pitch_data), max(yaw_data))+5)
+        return att_lines
     
     # Create animation - using a faster update interval for real-time responsiveness
     ani = FuncAnimation(fig, update_plot, interval=UPDATE_INTERVAL, blit=True, cache_frame_data=False)
@@ -219,8 +148,11 @@ finally:
     stop_thread = True
     if 'serial_thread' in locals():
         serial_thread.join(timeout=1.0)
-    
     # Close serial port when done
     if 'ser' in locals() and ser.is_open:
         ser.close()
         print("Serial port closed")
+    # Close CSV file
+    if 'csv_file' in locals():
+        csv_file.close()
+        print(f"Data saved to {CSV_FILENAME}")

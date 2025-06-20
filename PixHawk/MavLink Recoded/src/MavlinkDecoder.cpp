@@ -532,7 +532,7 @@ void MavlinkDecoder::requestAllDataStreams(uint8_t streamRate) {
     // by setting the appropriate parameters
     requestHighResIMU();
     
-    Serial.println("Requested all MAVLink data streams");
+    // Serial.println("Requested all MAVLink data streams");
     
     // Also request streams by specific message ID
     requestSpecificStreams();
@@ -589,7 +589,7 @@ void MavlinkDecoder::requestHighResIMU() {
     // Send the message
     Serial2.write(buffer, len);
     
-    Serial.println("Requested HIGHRES_IMU data stream specifically");
+    // Serial.println("Requested HIGHRES_IMU data stream specifically");
 }
 
 void MavlinkDecoder::requestSpecificStreams() {
@@ -632,7 +632,7 @@ void MavlinkDecoder::requestSpecificStreams() {
     mavlink_message_t msg;
     uint16_t len;
     
-    Serial.println("Requesting specific MAVLink data streams...");
+    // Serial.println("Requesting specific MAVLink data streams...");
     
     // Send a command to set the message interval for each stream
     for (int i = 0; i < numStreams; i++) {
@@ -666,14 +666,14 @@ void MavlinkDecoder::requestSpecificStreams() {
         delay(10);
         
         // Debug output 
-        Serial.print("Requested stream ID ");
-        Serial.print(streams[i].msgId);
-        Serial.print(" at ");
-        Serial.print(streams[i].rate);
-        Serial.println(" Hz");
+        // Serial.print("Requested stream ID ");
+        // Serial.print(streams[i].msgId);
+        // Serial.print(" at ");
+        // Serial.print(streams[i].rate);
+        // Serial.println(" Hz");
     }
     
-    Serial.println("All stream requests sent!");
+    // Serial.println("All stream requests sent!");
 }
 
 bool MavlinkDecoder::getAttitude(float &roll, float &pitch, float &yaw) {
