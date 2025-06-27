@@ -45,14 +45,10 @@ MavlinkDecoder mavlink;
 MavLinkMessage message;
 
 
-// Define buzzer pin
-#define BUZZER_PIN 22
 
-
-bool SDSetup() {
-    // Code will now recognize BUILTIN_SDCARD
+int SDSetup() {
     if (!SD.begin(BUILTIN_SDCARD)) {
-        return false;
+        return 0;
     }
 
     int i = 0;
@@ -60,7 +56,7 @@ bool SDSetup() {
         i++;
     }
     currentFilePath = "datalog_" + String(i) + ".txt";
-    return true;
+    return 1;
 }
 
 void SDWrite(const String& log) {
@@ -138,7 +134,7 @@ void calibrateIMU() {
             
 }
 
-void sensorSetup() {
+int sensorSetup() {
     IMU_EN_SENSOR_TYPE enMotionSensorType, enPressureType;
     imuInit(&enMotionSensorType, &enPressureType);
     
@@ -147,6 +143,8 @@ void sensorSetup() {
     
     // Call the dedicated calibration function
     // calibrateIMU();
+
+    return 1;
 }
 
 void DAQacquire() {
@@ -220,7 +218,7 @@ void formRadioPacket(char* packet, size_t packet_size) {
     
     // Add %.2f for bearing in format string
     int written = snprintf(packet, packet_size,
-        "%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
+        "FC:%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
         currentPacket.ack,
         currentPacket.RSSI,
         currentPacket.SNR,
@@ -263,7 +261,7 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
     int written = snprintf(packet, packet_size,
         "%d,%d,%d," // ack, RSSI, SNR
         "%llu,%lu," // FC time: fc_unix_time_usec, fc_boot_time_ms
-        "%.6f,%.6f,%.2f,%.2f,%.2f," // FC GPS: lat1, lon1, alt1, speed1, time1
+        // "%.6f,%.6f,%.2f,%.2f,%.2f," // FC GPS: lat1, lon1, alt1, speed1, time1
         "%.6f,%.6f,%.2f,%.2f,%.2f," // Pixhawk GPS: lat2, lon2, alt2, speed2, time2
         "%.2f,%.2f,%.2f," // FC IMU: absPressure1, temperature1, altitude1
         "%.2f,%.2f,%.2f," // Pixhawk IMU: absPressure2, temperature2, diffPressure2
@@ -278,11 +276,11 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
         currentAltPacket.SNR,
         currentAltPacket.fc_unix_time_usec,
         currentAltPacket.fc_boot_time_ms,
-        currentAltPacket.gpsLat1,
-        currentAltPacket.gpsLon1,
-        currentAltPacket.gpsAlt1,
-        currentAltPacket.gpsSpeed1,
-        currentAltPacket.gpsTime1,
+        // currentAltPacket.gpsLat1,
+        // currentAltPacket.gpsLon1,
+        // currentAltPacket.gpsAlt1,
+        // currentAltPacket.gpsSpeed1,
+        // currentAltPacket.gpsTime1,
         currentAltPacket.gpsLat2,
         currentAltPacket.gpsLon2,
         currentAltPacket.gpsAlt2,
@@ -313,8 +311,10 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
         currentAltPacket.gpsBearingGroundSpeed,
         currentAltPacket.gpsBearingGroundSpeedMagnetic,
         currentAltPacket.gpsBearingGroundSpeedTrue,
-        currentPacket.photodiodeValue1,
-        currentPacket.photodiodeValue2
+        currentAltPacket.photodiodeValue1,
+        currentAltPacket.photodiodeValue2,
+        currentAltPacket.FC_battery_voltage,
+        currentAltPacket.LED_battery_voltage
     );
 
     // Ensure proper termination
@@ -398,10 +398,10 @@ void updateAltRadioPacket(int rssi, int snr) {
     currentAltPacket.fc_unix_time_usec = 0; // Placeholder: FC Unix time (requires RTC or GPS sync)
 
     // GPS data 1 (FC)
-    currentAltPacket.gpsLat1 = currentGPSData.latitude;
-    currentAltPacket.gpsLon1 = currentGPSData.longitude;
-    currentAltPacket.gpsAlt1 = currentGPSData.altitude; // Altitude from GPS
-    currentAltPacket.gpsSpeed1 = currentGPSData.speed;  // Speed in km/h
+    // currentAltPacket.gpsLat1 = currentGPSData.latitude;
+    // currentAltPacket.gpsLon1 = currentGPSData.longitude;
+    // currentAltPacket.gpsAlt1 = currentGPSData.altitude; // Altitude from GPS
+    // currentAltPacket.gpsSpeed1 = currentGPSData.speed;  // Speed in km/h
 
     // Convert FC GPS time from UTC to local time (e.g., Eastern Time UTC-4/UTC-5)
     float fc_utcTime = currentGPSData.time;
@@ -410,19 +410,20 @@ void updateAltRadioPacket(int rssi, int snr) {
     float fc_seconds = fc_utcTime - fc_hours * 10000 - fc_minutes * 100;
     int timeZoneOffset = -4; // Example: EDT (UTC-4). Adjust as needed.
     fc_hours = (fc_hours + timeZoneOffset + 24) % 24;
-    currentAltPacket.gpsTime1 = fc_hours * 10000 + fc_minutes * 100 + fc_seconds;
+    // currentAltPacket.gpsTime1 = fc_hours * 10000 + fc_minutes * 100 + fc_seconds;
 
     // GPS data 2 (Pixhawk) - from MAVLink message
     currentAltPacket.gpsLat2 = message.lat / 1.0e7f; // Convert from int32 (degrees * 1E7)
     currentAltPacket.gpsLon2 = message.lon / 1.0e7f; // Convert from int32 (degrees * 1E7)
     currentAltPacket.gpsAlt2 = message.alt_vfr;      // Altitude from VFR_HUD (meters MSL)
     currentAltPacket.gpsSpeed2 = message.groundspeed * 3.6f; // Convert m/s to km/h
-    currentAltPacket.gpsTime2 = 0.0f; // Placeholder: Needs proper MAVLink GPS time source
+    currentAltPacket.gpsTime2 = message.unix_time_usec;
 
     // IMU data 1 (FC)
     currentAltPacket.absPressure1 = s32PressureVal / 100.0f;
     currentAltPacket.temperature1 = s32TemperatureVal / 100.0f;
-    currentAltPacket.altitude1 = s32AltitudeVal / 100.0f; // FC Barometric altitude
+    // currentAltPacket.altitude1 = s32AltitudeVal / 100.0f; // FC Barometric altitude
+    currentAltPacket.altitude1 = -1;
 
     // IMU data 2 (Pixhawk) - from MAVLink message
     currentAltPacket.absPressure2 = message.abs_pressure; // hPa
@@ -461,6 +462,9 @@ void updateAltRadioPacket(int rssi, int snr) {
     // Photodiode data
     currentAltPacket.photodiodeValue1 = photodiodeValue1;
     currentAltPacket.photodiodeValue2 = photodiodeValue2;
+
+    currentAltPacket.FC_battery_voltage = 0.0f; // Placeholder: Update with actual FC battery voltage
+    currentAltPacket.LED_battery_voltage = 0.0f; // Placeholder:
 
     MAVLinkMutex.unlock();
     GPSmutex.unlock();
@@ -612,8 +616,9 @@ void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2) {
     *photodiodeValue2 = analogRead(27);
 }
 
-void MAVsetup(){
+int MAVsetup(){
     mavlink.begin(921600);
+    return 1;
 }
 
 void MAVLinkAcquire(){
@@ -629,4 +634,28 @@ void MAVLinkAcquire(){
         mavlink.getLoggingStats(message.write_rate, message.space_left);
         mavlink.getVibrationData(message.vibe_x, message.vibe_y, message.vibe_z, message.clipping_x, message.clipping_y, message.clipping_z);
     }
+}
+
+void debugPixhawkData(MavLinkMessage &message){
+    // Lock the mutex before accessing MAVLink data
+    MAVLinkMutex.lock();
+    
+    Serial.println("Pixhawk Data:");
+    Serial.print("Roll: "); Serial.println(message.roll);
+    Serial.print("Pitch: "); Serial.println(message.pitch);
+    Serial.print("Yaw: "); Serial.println(message.yaw);
+    Serial.print("Latitude: "); Serial.println(message.lat / 1.0e7f); // Convert from int32 (degrees * 1E7)
+    Serial.print("Longitude: "); Serial.println(message.lon / 1.0e7f); // Convert from int32 (degrees * 1E7)
+    Serial.print("Altitude: "); Serial.println(message.alt_vfr); // Altitude in meters MSL
+    Serial.print("Groundspeed: "); Serial.println(message.groundspeed);
+    Serial.print("Heading: "); Serial.println(message.heading);
+    Serial.print("Battery Voltage: "); Serial.println(message.voltage);
+    Serial.print("Battery Current: "); Serial.println(message.current);
+    Serial.print("Remaining Battery: "); Serial.println(message.remaining);
+    // Add more fields as needed
+
+    Serial.println("==========================");
+    
+    // Unlock the mutex when done
+    MAVLinkMutex.unlock();
 }

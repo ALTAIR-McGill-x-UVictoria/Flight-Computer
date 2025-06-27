@@ -106,6 +106,44 @@ void loop() {
             Serial.print("Satellites: "); Serial.println(satellites);
         }
         
+        // Get GPS time data
+        uint64_t gps_time_usec;
+        uint8_t fix_type;
+        if (mavlink.getGpsTime(gps_time_usec, fix_type)) {
+            Serial.println("--- GPS Time Data ---");
+            
+            // Display GPS time in human-readable format
+            time_t gps_time_sec = gps_time_usec / 1000000;
+            
+            // Convert to local time format (HH:MM:SS)
+            int hours = (gps_time_sec % 86400) / 3600;
+            int minutes = (gps_time_sec % 3600) / 60;
+            int seconds = gps_time_sec % 60;
+            
+            Serial.print("GPS Time (usec): ");
+            Serial.println(gps_time_usec);
+
+            Serial.print("GPS Time: ");
+            if (hours < 10) Serial.print("0");
+            Serial.print(hours);
+            Serial.print(":");
+            if (minutes < 10) Serial.print("0");
+            Serial.print(minutes);
+            Serial.print(":");
+            if (seconds < 10) Serial.print("0");
+            Serial.println(seconds);
+            
+            // Display GPS fix type
+            Serial.print("GPS Fix Type: ");
+            switch (fix_type) {
+                case 0: Serial.println("No GPS"); break;
+                case 1: Serial.println("No Fix"); break;
+                case 2: Serial.println("2D Fix"); break;
+                case 3: Serial.println("3D Fix"); break;
+                default: Serial.println(fix_type);
+            }
+        }
+        
         // Get battery info
         float voltage, current;
         int8_t remaining;

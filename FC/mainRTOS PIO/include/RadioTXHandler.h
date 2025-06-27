@@ -5,12 +5,12 @@
 #include "utils.h"
 
 //Radio pin definitions
-#define RFM95_RST 20
-#define RFM95_CS 37
-#define RFM95_INT 21
+#define RFM95_RST 23
+#define RFM95_CS 10
+#define RFM95_INT 22
 
 //LoRa parameters definitions
-#define RF95_FREQ 905.0
+#define RF95_FREQ 915.0
 #define SF 8
 #define BW 125000
 #define TX_POWER 20
@@ -29,7 +29,7 @@ class Radio {
     int ack;
     Radio();
     ~Radio();
-    void setup();
+    int setup();
     void radioTx(const char* packet);
     bool radioRx(char* buffer, uint8_t* len);
     void FCradioHandler(const char* packet);

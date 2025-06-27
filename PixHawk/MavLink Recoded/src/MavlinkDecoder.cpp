@@ -7,7 +7,10 @@ static struct {
     
     int32_t lat, lon, alt;
     uint8_t satellites;
+    uint64_t gps_time_usec;  // GPS timestamp in microseconds
+    uint8_t gps_fix_type;    // GPS fix type (0-1: no fix, 2: 2D fix, 3: 3D fix)
     bool gps_valid = false;
+    bool gps_time_valid = false;  // Flag for valid GPS time
     
     float voltage, current;
     int8_t remaining;
@@ -148,7 +151,10 @@ bool MavlinkDecoder::update() {
                     mavlink_data.lon = gps.lon;
                     mavlink_data.alt = gps.alt;
                     mavlink_data.satellites = gps.satellites_visible;
+                    mavlink_data.gps_fix_type = gps.fix_type;
+                    mavlink_data.gps_time_usec = gps.time_usec;  // Store GPS timestamp
                     mavlink_data.gps_valid = true;
+                    mavlink_data.gps_time_valid = (gps.time_usec > 0); // Mark time as valid if non-zero
                     break;
                 }
                 
@@ -463,6 +469,15 @@ bool MavlinkDecoder::update() {
     }
     
     return messageReceived;
+}
+
+bool MavlinkDecoder::getGpsTime(uint64_t &gps_time_usec, uint8_t &fix_type) {
+    if (mavlink_data.gps_time_valid) {
+        gps_time_usec = mavlink_data.gps_time_usec;
+        fix_type = mavlink_data.gps_fix_type;
+        return true;
+    }
+    return false;
 }
 
 void MavlinkDecoder::sendHeartbeat() {

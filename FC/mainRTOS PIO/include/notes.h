@@ -1,6 +1,8 @@
 #ifndef NOTES_H
 #define NOTES_H
 
+#define BUZZER_PIN 20
+
 // Define musical note frequencies
 #define NOTE_B0  31
 #define NOTE_C1  33
@@ -59,5 +61,12 @@
 #define NOTE_F5  698
 #define NOTE_FS5 740
 #define NOTE_G5  784
+
+void playStartupJingle();
+void playWaitingJingle();
+void playErrorJingle();
+void playPingJingle();
+
+
 
 #endif // NOTES_H

@@ -4,6 +4,7 @@
 #include <TeensyThreads.h>
 #include <SD.h>
 #include "Waveshare_10Dof-D.h"
+#include "MAVLink.h"  // Make sure to include this for MavLinkMessage
 
 #define GPS_SERIAL Serial8
 
@@ -17,143 +18,7 @@ extern IMU_ST_SENSOR_DATA stAccelRawData;
 extern IMU_ST_SENSOR_DATA stMagnRawData;
 extern Threads::Mutex DAQmutex;
 
-// GPS data structure - moved to top before it's used
-struct GPSData {
-    float time;      // UTC time (HHMMSS.SS)
-    float latitude;  // Decimal degrees
-    float longitude; // Decimal degrees
-    float speed;     // Speed in km/h
-    float course;    // Course over ground in degrees
-    float altitude;  // Altitude in meters
-    float hdop;      // Horizontal dilution of precision
-    int date;        // Date (DDMMYY)
-    int satellites;  // Number of satellites in view
-    bool valid;      // GPS fix valid
-};
-
-// Function declarations
-bool SDSetup();
-void SDWrite(const String& data);
-void sensorSetup();
-void calibrateIMU();
-void DAQacquire();
-void GPSacquire();
-void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2);
-void photodiodeSetup();
-
-// GPS parsing functions
-bool parseGPSString(const char* gpsString, GPSData& data);
-bool parseGPRMC(const char* rmcString, GPSData& data);
-bool parseGPGGA(const char* ggaString, GPSData& data);
-
-// Radio packet functions
-void formRadioPacket(char* packet, size_t packet_size);
-void updateRadioPacket(int rssi = 0, int snr = 0);
-
-// New functions for altRadioPacket
-void formAltRadioPacket(char* packet, size_t packet_size);
-void updateAltRadioPacket(int rssi = 0, int snr = 0);
-
-// Pixhawk functions
-void PixHawkAcquire();
-void PixHawkLoop();
-
-void MAVsetup();
-void MAVLinkAcquire();
-
-extern String currentFilePath;
-
-extern int32_t s32PressureVal;
-extern int32_t s32TemperatureVal;
-extern int32_t s32AltitudeVal;
-
-// Mutex for DAQ thread
-
-struct radioPacket {
-    // Communication data
-    int ack;
-    int16_t RSSI;
-    int SNR;
-    // IMU data
-    float fRoll;
-    float fPitch;
-    float fYaw;
-    float Pressure;
-    float Temperature;
-    float Altitude;
-    // System status
-    bool SDStatus;
-    bool actuatorStatus;
-    int photodiodeValue1;
-    int photodiodeValue2;
-    // GPS data
-    float gpsLat;
-    float gpsLon;
-    float gpsAlt;
-    float gpsSpeed;
-    float gpsTime;
-    bool gpsValid;
-    // Navigation data
-
-};
-
-struct altRadioPacket {
-    // Communication data
-    int ack;
-    int16_t RSSI;
-    int SNR;
-    // Time (FC)
-    uint64_t fc_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
-    uint32_t fc_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
-    // GPS data 1 (FC)
-    float gpsLat1;
-    float gpsLon1;
-    float gpsAlt1;
-    float gpsSpeed1;
-    float gpsTime1;
-    // GPS data 2 (Pixhawk)
-    float gpsLat2;
-    float gpsLon2;
-    float gpsAlt2;
-    float gpsSpeed2;
-    float gpsTime2;
-    // IMU data 1 (FC)
-    float absPressure1;
-    float temperature1;
-    float altitude1;
-    // IMU data 2 (Pixhawk)
-    float absPressure2;
-    float temperature2;
-    float diffPressure2;
-    // FC System status
-    bool SDStatus;
-    bool actuatorStatus;
-    // Pixhawk System status
-    bool logging_active;
-    uint32_t write_rate;
-    uint32_t space_left;
-    // Pixhawk System time
-    uint64_t pix_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
-    uint32_t pix_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
-    // Vibration data
-    float vibe_x;
-    float vibe_y;
-    float vibe_z;
-    uint32_t clipping_x;
-    uint32_t clipping_y;
-    uint32_t clipping_z;
-    // Navigation data
-    float gpsBearing;
-    float gpsBearingMagnetic;
-    float gpsBearingTrue;
-    float gpsBearingGroundSpeed;
-    float gpsBearingGroundSpeedMagnetic;
-    float gpsBearingGroundSpeedTrue;
-    // Photodiode data
-    int photodiodeValue1;
-    int photodiodeValue2;
-};
-
+// IMPORTANT: Move MavLinkMessage struct definition here, before it's used
 struct MavLinkMessage {
     // Attitude data
     float roll;
@@ -204,6 +69,150 @@ struct MavLinkMessage {
     uint32_t clipping_x;
     uint32_t clipping_y;
     uint32_t clipping_z;
+};
+
+// Declare the global message variable
+extern MavLinkMessage message;
+extern Threads::Mutex MAVLinkMutex;
+
+// GPS data structure - moved to top before it's used
+struct GPSData {
+    float time;      // UTC time (HHMMSS.SS)
+    float latitude;  // Decimal degrees
+    float longitude; // Decimal degrees
+    float speed;     // Speed in km/h
+    float course;    // Course over ground in degrees
+    float altitude;  // Altitude in meters
+    float hdop;      // Horizontal dilution of precision
+    int date;        // Date (DDMMYY)
+    int satellites;  // Number of satellites in view
+    bool valid;      // GPS fix valid
+};
+
+// Function declarations
+int SDSetup();
+void SDWrite(const String& data);
+int sensorSetup();
+void calibrateIMU();
+void DAQacquire();
+void GPSacquire();
+void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2);
+void photodiodeSetup();
+
+// GPS parsing functions
+bool parseGPSString(const char* gpsString, GPSData& data);
+bool parseGPRMC(const char* rmcString, GPSData& data);
+bool parseGPGGA(const char* ggaString, GPSData& data);
+
+// Radio packet functions
+void formRadioPacket(char* packet, size_t packet_size);
+void updateRadioPacket(int rssi = 0, int snr = 0);
+
+// New functions for altRadioPacket
+void formAltRadioPacket(char* packet, size_t packet_size);
+void updateAltRadioPacket(int rssi = 0, int snr = 0);
+
+// Pixhawk functions
+int MAVsetup();
+void MAVLinkAcquire();
+
+// Debug data functions
+void debugPixhawkData(MavLinkMessage &message);
+
+extern String currentFilePath;
+
+extern int32_t s32PressureVal;
+extern int32_t s32TemperatureVal;
+extern int32_t s32AltitudeVal;
+
+// Mutex for DAQ thread
+
+struct radioPacket {
+    // Communication data
+    int ack;
+    int16_t RSSI;
+    int SNR;
+    // IMU data
+    float fRoll;
+    float fPitch;
+    float fYaw;
+    float Pressure;
+    float Temperature;
+    float Altitude;
+    // System status
+    bool SDStatus;
+    bool actuatorStatus;
+    int photodiodeValue1;
+    int photodiodeValue2;
+    // GPS data
+    float gpsLat;
+    float gpsLon;
+    float gpsAlt;
+    float gpsSpeed;
+    float gpsTime;
+    bool gpsValid;
+    // Navigation data
+
+};
+
+struct altRadioPacket {
+    // Communication data
+    int ack;
+    int16_t RSSI;
+    int SNR;
+    // Time (FC)
+    uint64_t fc_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
+    uint32_t fc_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
+    // GPS data 1 (FC)
+    // float gpsLat1;
+    // float gpsLon1;
+    // float gpsAlt1;
+    // float gpsSpeed1;
+    // float gpsTime1;
+    // GPS data 2 (Pixhawk)
+    float gpsLat2;
+    float gpsLon2;
+    float gpsAlt2;
+    float gpsSpeed2;
+    float gpsTime2;
+    // IMU data 1 (FC)
+    float absPressure1;
+    float temperature1;
+    float altitude1;
+    // IMU data 2 (Pixhawk)
+    float absPressure2;
+    float temperature2;
+    float diffPressure2;
+    // FC System status
+    bool SDStatus;
+    bool actuatorStatus;
+    // Pixhawk System status
+    bool logging_active;
+    uint32_t write_rate;
+    uint32_t space_left;
+    // Pixhawk System time
+    uint64_t pix_unix_time_usec; // IMPORTANT: Example rename from unix_time_usec
+    uint32_t pix_boot_time_ms;   // IMPORTANT: Example rename from boot_time_ms
+    // Vibration data
+    float vibe_x;
+    float vibe_y;
+    float vibe_z;
+    uint32_t clipping_x;
+    uint32_t clipping_y;
+    uint32_t clipping_z;
+    // Navigation data
+    float gpsBearing;
+    float gpsBearingMagnetic;
+    float gpsBearingTrue;
+    float gpsBearingGroundSpeed;
+    float gpsBearingGroundSpeedMagnetic;
+    float gpsBearingGroundSpeedTrue;
+    // Photodiode data
+    int photodiodeValue1;
+    int photodiodeValue2;
+    // Battery data
+    float FC_battery_voltage; // FC battery voltage
+    float LED_battery_voltage; // LED battery voltage
 };
 
 #ifdef USE_ALT_PACKET
