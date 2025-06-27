@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+PixHawk/IMU test/plot_pixhawk.py
+PixHawk/MavLink Recoded/platformio.ini
+PixHawk/MavLink Recoded/src/main.cpp
+PixHawk/IMU test/attitude_data.csv

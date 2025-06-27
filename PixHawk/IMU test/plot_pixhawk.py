@@ -90,7 +90,7 @@ def read_serial_data(ser):
         # time.sleep(0.001)
 
 def parse_line(line):
-    timestamp = int(time.time())
+    timestamp = int(time.time_ns())
     return timestamp
     exit()
     return None

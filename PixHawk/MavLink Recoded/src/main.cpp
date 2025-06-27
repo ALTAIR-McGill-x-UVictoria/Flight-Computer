@@ -1,24 +1,26 @@
 #include <Arduino.h>
 #include <Teensy_PWM.h>
+#include <TinyGPSPlus.h>
 #include "MavlinkDecoder.h"
 
+
 // Define ESC parameters
-constexpr uint8_t ESC_PIN       = 24;      // PWM output pin
+constexpr uint8_t ESC_PIN       = 19;      // PWM output pin
+constexpr uint8_t GPS_PIN       = 0;      // GPS RX Pin 
 constexpr float   ESC_FREQUENCY = 50.0f;   // Standard hobby-ESC rate (50 Hz)
 constexpr float   MIN_DUTY      = 5.0f;    // 1 ms pulse  ≈ throttle off
 constexpr float   MAX_DUTY      = 10.0f;   // 2 ms pulse  ≈ full throttle
 constexpr uint32_t FULL_RUN_MS  = 200000;
 
-// Create an instance of the MAVLink decoder
-MavlinkDecoder mavlink;
 // Create an instance of the esc
 Teensy_PWM* escPWM;
+// Create an instance of the gps
+TinyGPSPlus gps;
 
 bool motorRunning = false;
 unsigned long motorStartTime = 0;
 bool motorHasRun = false;
 
-unsigned long loggingStartTime = 0; // Start time for logging
 
 
 // Timer for periodic operations
@@ -52,81 +54,73 @@ void flushLogBuffer() {
 }
 
 void setup() {
-    loggingStartTime = micros();
     Serial.begin(15200);
     while (!Serial);
 
     Serial.println("Initializing...");
-    mavlink.begin(921600);
-    // mavlink.begin(115200);
-    delay(1000);
 
     escPWM = new Teensy_PWM(ESC_PIN, ESC_FREQUENCY, MIN_DUTY);
     escPWM->setPWM(ESC_PIN, ESC_FREQUENCY, MIN_DUTY);
+    Serial.println("Motor initialized...");
 
+
+    Serial1.begin(9600);
     // Serial.println("Setup complete. Will spin motor from loop()");
 
 }
 
 
 void loop() {
-    // Update the MAVLink decoder (process incoming messages)
-    mavlink.requestAllDataStreams(10); // or specifically request SYSTEM_TIME
-    mavlink.update();
+    static int lastPrintedSecond = -1; // Track last printed second
 
-    // Send heartbeat message every 1 second
+    bool gpsUpdated = false;
+    while (Serial1.available()) {
+        gps.encode(Serial1.read());
+        gpsUpdated = true;
+    }
+
+    if (gpsUpdated && gps.time.isValid()) {
+        int currentSecond = gps.time.second();
+        if (currentSecond != lastPrintedSecond) {
+            lastPrintedSecond = currentSecond;
+            Serial.print("UTC Time: ");
+            Serial.print(gps.time.hour());
+            Serial.print(":");
+            Serial.print(gps.time.minute());
+            Serial.print(":");
+            Serial.println(gps.time.second());
+        }
+    }
+
     unsigned long currentMillis = millis();
     unsigned long currentMicros = micros();
 
     // --- Add 10s delay after logging starts before running motor ---
     
-
-    if (currentMillis - lastHeartbeat > 1000) {
-        lastHeartbeat = currentMillis;
-        // mavlink.sendHeartbeat();
-        
-        // Request data streams after a few heartbeats
-        if (!dataStreamsRequested && currentMillis > 5000) {
-            mavlink.requestAllDataStreams(10); // Request at 10 Hz
-            dataStreamsRequested = true;
-        }
-    }
     
     // Update the serial command handler in loop()
 
     // Check for serial commands to control logging and arming
 
-    if (currentMicros - lastPrint > 1000) {
-        lastPrint = currentMicros;
 
-        float roll, pitch, yaw;
-        if (mavlink.getAttitude(roll, pitch, yaw)) {
-            // char line[LOG_LINE_MAXLEN];
 
-            // snprintf(line, LOG_LINE_MAXLEN, "%lu,Roll,%.2f", micros(), roll * 57.3f);
-            // bufferLog(line);
-            // snprintf(line, LOG_LINE_MAXLEN, "%lu,Pitch,%.2f", micros(), pitch * 57.3f);
-            // bufferLog(line);
-            // snprintf(line, LOG_LINE_MAXLEN, "%lu,Yaw,%.2f", micros(), yaw * 57.3f);
-            // bufferLog(line);
-            Serial.print(micros()); Serial.print(","); Serial.print("roll;"); Serial.println(roll * 57.3f);
-            Serial.print(micros()); Serial.print(","); Serial.print("pitch;"); Serial.println(pitch * 57.3f);
-            Serial.print(micros()); Serial.print(","); Serial.print("yaw;"); Serial.println(yaw * 57.3f);
-        
-        }
-
-        if (!motorRunning && !motorHasRun && (micros() - loggingStartTime >= 10000000)) {
+    if (gps.time.second() == 0 && !motorRunning && !motorHasRun && (currentMicros >= 10000000)) {
         motorRunning = true;
         motorStartTime = currentMicros;
-
-
+        Serial.println(motorStartTime);
         // Buffer motor start log
         // char motorStartLine[LOG_LINE_MAXLEN];
         // snprintf(motorStartLine, LOG_LINE_MAXLEN, "%lu,Motor,START", micros());
         // bufferLog(motorStartLine);
         Serial.flush();
         // Print unix time (seconds) before Motor,START
-        Serial.print(motorStartTime); Serial.print(","); Serial.println("Motor");
+        Serial.print("Time (UTC): ");
+        Serial.print(gps.time.hour());
+        Serial.print(":");
+        Serial.print(gps.time.minute());
+        Serial.print(":");
+        Serial.print(gps.time.second());
+        Serial.print(","); Serial.println("Start");
         escPWM->setPWM(ESC_PIN, ESC_FREQUENCY, 0.7 * MAX_DUTY);
         motorHasRun = true;
         tone(20, 440, 200);
@@ -138,13 +132,13 @@ void loop() {
         // snprintf(motorStopLine, LOG_LINE_MAXLEN, "%lu,Motor,STOP", micros());
         // bufferLog(motorStopLine);
         // Serial.flush();
-        Serial.print(micros()); Serial.print(","); Serial.println("Motor");
+        Serial.print(micros()); Serial.print(","); Serial.println("Stop");
         // Serial.print("Time (ms): "); Serial.println(currentMillis);
         escPWM->setPWM(ESC_PIN, ESC_FREQUENCY, MIN_DUTY);
         motorRunning = false;
         noTone(20);
     }
-    }
+    
 
     // Flush buffer at the end of each loop
     flushLogBuffer();
