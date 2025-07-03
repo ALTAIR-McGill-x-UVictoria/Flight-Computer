@@ -109,6 +109,13 @@ void isBatteryLow();
 void isBatteryCritical();
 float getBatteryVoltage();
 
+void LEDHandler();
+void trackingLED();
+void sourceLED();
+void trackingLEDCached(uint64_t gps_time_usec);
+void sourceLEDCached(uint64_t gps_time_usec);
+void LED_Setup();
+
 void mavlinkUpdateThread();
 
 extern float batteryVoltage;
@@ -191,7 +198,7 @@ struct altRadioPacket {
     float gpsLon2;
     float gpsAlt2;
     float gpsSpeed2;
-    float gpsTime2;
+    uint32_t gpsTime2;
     // IMU data 1 (FC)
     float absPressure1;
     float temperature1;
