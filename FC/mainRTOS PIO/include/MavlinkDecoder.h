@@ -91,6 +91,8 @@ public:
     // Get vibration data
     bool getVibrationData(float &vibe_x, float &vibe_y, float &vibe_z, 
                           uint32_t &clip_x, uint32_t &clip_y, uint32_t &clip_z);
+                        
+    bool getGpsTime(uint64_t &gps_time_usec, uint8_t &fix_type);
 };
 
 #endif // MAVLINK_DECODER_H

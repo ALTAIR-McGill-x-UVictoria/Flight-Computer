@@ -50,28 +50,261 @@ MavLinkMessage message;
 
 
 
+// Add these variables at the top with other globals
+static bool sdCardInitialized = false;
+static String logFileName = "flight_log.txt";
+static unsigned long logCounter = 0;
+
 int SDSetup() {
-    if (!SD.begin(BUILTIN_SDCARD)) {
+    Serial.println("Initializing SD card...");
+    Serial.print("Using Teensy 4.1 built-in SD card (pin 254)...");
+    
+    // Add a small delay before initialization
+    delay(1000);
+    
+    // Use pin 254 directly for Teensy 4.1 built-in SD card
+    if (SD.begin(254)) {
+        Serial.println(" SUCCESS!");
+        sdCardInitialized = true;
+    } else {
+        Serial.println(" FAILED!");
+        Serial.println("SD CARD INITIALIZATION FAILED!");
+        Serial.println("Troubleshooting steps:");
+        Serial.println("1. Ensure SD card is properly inserted");
+        Serial.println("2. Check SD card is formatted as FAT32");
+        Serial.println("3. Try a different SD card");
+        Serial.println("4. Check card is not write-protected");
+        Serial.println("5. Try reformatting the card");
+        Serial.println();
+        Serial.println("Continuing without SD card...");
+        
+        sdCardInitialized = false;
+        return 0; // Return 0 to indicate failure
+    }
+    
+    // Print SD card information
+    printSDCardInfo();
+    
+    // Find next available log file number
+    int fileIndex = 0;
+    while (SD.exists(("flight_log_" + String(fileIndex) + ".txt").c_str())) {
+        fileIndex++;
+    }
+    logFileName = "flight_log_" + String(fileIndex) + ".txt";
+    currentFilePath = logFileName; // Update the global variable
+    
+    Serial.print("Using log file: ");
+    Serial.println(logFileName);
+    
+    // Create header for new log file
+    File dataFile = SD.open(logFileName.c_str(), FILE_WRITE);
+    if (dataFile) {
+        dataFile.println("Flight Computer Data Log");
+        dataFile.println("========================");
+        dataFile.print("Start Time: ");
+        dataFile.println(millis());
+        dataFile.println("GPS_Unix_Time_usec,FC_Boot_Time_ms,GPS_Lat,GPS_Lon,GPS_Alt,Pixhawk_Pressure,Pixhawk_Alt,Teensy_Temp,Pixhawk_Temp,FC_Battery_V,LED_Battery_V,Photodiode1,Photodiode2,LED_Source,LED_Green,LED_Red,Termination,ACK,RSSI,SNR");
+        dataFile.close();
+        Serial.println("Created new log file with header");
+    } else {
+        Serial.println("Failed to create log file header");
         return 0;
     }
-
-    int i = 0;
-    while (SD.exists(("datalog_" + String(i) + ".txt").c_str())) {
-        i++;
-    }
-    currentFilePath = "datalog_" + String(i) + ".txt";
-    return 1;
+    
+    return 1; // Success
 }
 
-void SDWrite(const String& log) {
-    File dataFile = SD.open(currentFilePath.c_str(), FILE_WRITE);
-
-    if (dataFile) {
-        dataFile.print(millis());
-        dataFile.print(": ");
-        dataFile.println(log);
-        dataFile.close();
+void SDWrite(const String& data) {
+    // Only attempt to write if SD card was successfully initialized
+    if (!sdCardInitialized) {
+        return;
     }
+    
+    File dataFile = SD.open(logFileName.c_str(), FILE_WRITE);
+    if (dataFile) {
+        logCounter++;
+        dataFile.print(millis());
+        dataFile.print(",");
+        dataFile.println(data);
+        dataFile.close();
+        
+        // Optional: Print to serial for debugging (remove in production)
+        // Serial.print("SD Log #");
+        // Serial.print(logCounter);
+        // Serial.print(": ");
+        // Serial.println(data);
+    } else {
+        Serial.println("Error: Failed to open SD card file for writing");
+        // Try to reinitialize SD card with pin 254
+        if (SD.begin(254)) {
+            Serial.println("SD card reinitialized successfully");
+            sdCardInitialized = true;
+        } else {
+            Serial.println("SD card reinitialize failed");
+            sdCardInitialized = false;
+        }
+    }
+}
+
+// Add these new functions to utils.cpp
+void printSDCardInfo() {
+    Serial.println("\nSD Card Information:");
+    Serial.println("--------------------");
+    if (sdCardInitialized) {
+        Serial.println("SD card initialized successfully");
+        Serial.println("Ready for logging operations");
+        
+        // Try to get card info
+        File root = SD.open("/");
+        if (root) {
+            Serial.println("Root directory accessible");
+            root.close();
+        }
+    } else {
+        Serial.println("SD card not initialized");
+    }
+    Serial.println();
+}
+
+void listSDFiles() {
+    if (!sdCardInitialized) {
+        Serial.println("SD card not available");
+        return;
+    }
+    
+    Serial.println("\nFiles on SD card:");
+    Serial.println("=================");
+    
+    File root = SD.open("/");
+    while (true) {
+        File entry = root.openNextFile();
+        if (!entry) {
+            break; // No more files
+        }
+        
+        Serial.print(entry.name());
+        if (entry.isDirectory()) {
+            Serial.println("/");
+        } else {
+            Serial.print("\t\t");
+            Serial.print(entry.size(), DEC);
+            Serial.println(" bytes");
+        }
+        entry.close();
+    }
+    root.close();
+    Serial.println();
+}
+
+void checkSDCardStatus() {
+    Serial.println("\nSD Card Status Check:");
+    Serial.println("====================");
+    
+    Serial.print("Initialized: ");
+    Serial.println(sdCardInitialized ? "YES" : "NO");
+    
+    Serial.print("Current log file: ");
+    Serial.println(logFileName);
+    
+    Serial.print("Log entries written: ");
+    Serial.println(logCounter);
+    
+    if (sdCardInitialized && SD.exists(logFileName.c_str())) {
+        File dataFile = SD.open(logFileName.c_str());
+        if (dataFile) {
+            Serial.print("Log file size: ");
+            Serial.print(dataFile.size());
+            Serial.println(" bytes");
+            dataFile.close();
+        }
+    }
+    
+    // Test write capability
+    Serial.println("Testing write capability...");
+    SDWrite("Test,0,0,0,0,0,0,0,0,0,0"); // Test write
+    
+    Serial.println("SD Card check complete.");
+    Serial.println();
+}
+
+// Enhanced logging function for flight data
+void logFlightData() {
+    if (!sdCardInitialized) {
+        return;
+    }
+    
+    DAQmutex.lock();
+    GPSmutex.lock();
+    
+    // Read LED pin states
+    int led_source = digitalRead(6);           // Source
+    int led_tracking_green = digitalRead(4); // Green
+    int led_tracking_red = digitalRead(5);     // Red
+    
+    // Read termination pin state
+    int termination_state = digitalRead(29);
+    
+    // Get Teensy 4.1 internal temperature
+    float teensy_temp = tempmonGetTemp();
+    
+    // SIMPLIFIED: Direct GPS time access without caching
+    uint64_t current_gps_time = 0;
+    uint8_t fix_type;
+    
+    // Get current GPS time directly
+    if (mavlink.getGpsTime(current_gps_time, fix_type)) {
+        // Use fresh GPS time directly
+        Serial.print("SD Log: GPS time ");
+        Serial.println((unsigned long)(current_gps_time / 1000000));
+    } else {
+        // Use message time directly
+        current_gps_time = message.unix_time_usec;
+        Serial.print("SD Log: Message time ");
+        Serial.println((unsigned long)(current_gps_time / 1000000));
+    }
+    
+    // Create comprehensive flight data string
+    String logData = 
+        // Time data first - use current GPS time directly
+        String(current_gps_time) + "," +                   // GPS UTC time (unix usec)
+        String(millis()) + "," +                           // FC boot time (ms)
+        
+        // GPS data
+        String(message.lat / 1.0e7f, 7) + "," +           // GPS latitude
+        String(message.lon / 1.0e7f, 7) + "," +           // GPS longitude
+        String(message.alt_vfr, 2) + "," +                // GPS altitude
+        
+        // Barometric data
+        String(message.abs_pressure, 2) + "," +           // Pixhawk barometer pressure
+        String(message.pressure_alt, 2) + "," +           // Pixhawk barometer altitude
+        
+        // Temperature data
+        String(teensy_temp, 2) + "," +                    // Teensy 4.1 temperature
+        String(message.temperature, 2) + "," +            // Pixhawk temperature
+        
+        // Power/Battery data
+        String(message.voltage, 2) + "," +                // FC battery voltage (from Pixhawk)
+        String(getBatteryVoltage(), 2) + "," +            // LED battery voltage
+        
+        // Sensor data
+        String(photodiodeValue1) + "," +                  // Photodiode 1
+        String(photodiodeValue2) + "," +                  // Photodiode 2
+        
+        // Digital pin states
+        String(led_source) + "," +                        // LED source pin 6
+        String(led_tracking_green) + "," +                // LED tracking green pin 4
+        String(led_tracking_red) + "," +                  // LED tracking red pin 5
+        String(termination_state) + "," +                 // Termination pin 29
+        
+        // Communication data
+        String(currentAltPacket.ack) + "," +              // Command ACK
+        String(currentAltPacket.RSSI) + "," +             // RSSI
+        String(currentAltPacket.SNR);                     // SNR
+    
+    GPSmutex.unlock();
+    DAQmutex.unlock();
+    
+    SDWrite(logData);
 }
 
 void calibrateIMU() {
@@ -261,10 +494,11 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
 
     memset(packet, 0, packet_size);
 
+    // FIXED: Ensure parameter order matches format string exactly
     int written = snprintf(packet, packet_size,
         "%d,%d,%d," // ack, RSSI, SNR
         ",%lu," // FC time: fc_unix_time_usec, fc_boot_time_ms
-        "%.6f,%.6f,%.2f,%.2f,%lu," // Pixhawk GPS: lat2, lon2, alt2, speed2, time2
+        "%.6f,%.6f,%.2f,%.2f,%llu," // Pixhawk GPS: lat2, lon2, alt2, speed2, time2
         ",,," // FC IMU: absPressure1, temperature1, altitude1
         "%.2f,%.2f,%.2f," // Pixhawk IMU: absPressure2, temperature2, diffPressure2
         "%d,%d," // FC Status: SDStatus, actuatorStatus
@@ -289,7 +523,7 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
         // currentAltPacket.altitude1,
         currentAltPacket.absPressure2,
         currentAltPacket.temperature2,
-        currentAltPacket.diffPressure2,
+        currentAltPacket.altitude1,
         currentAltPacket.SDStatus ? 1 : 0,
         currentAltPacket.actuatorStatus ? 1 : 0,
         currentAltPacket.logging_active ? 1 : 0,
@@ -392,18 +626,15 @@ void updateAltRadioPacket(int rssi, int snr) {
     // GPS data 2 (Pixhawk) - from MAVLink message
     currentAltPacket.gpsLat2 = message.lat / 1.0e7f;
     currentAltPacket.gpsLon2 = message.lon / 1.0e7f;
-    currentAltPacket.gpsAlt2 = message.alt_vfr;
+    currentAltPacket.gpsAlt2 = message.alt / 1000.0f;
     currentAltPacket.gpsSpeed2 = message.groundspeed * 3.6f;
     
-    // FIXED: GPS time conversion - this was wrong
-    // OLD: currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds
-    // NEW: Use GPS time properly
-    currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds (float)
+    currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000;
 
     // IMU data 1 (FC)
     currentAltPacket.absPressure1 = s32PressureVal / 100.0f;
     currentAltPacket.temperature1 = s32TemperatureVal / 100.0f;
-    currentAltPacket.altitude1 = s32AltitudeVal / 100.0f;
+    currentAltPacket.altitude1 = message.pressure_alt;
 
     // IMU data 2 (Pixhawk) - from MAVLink message
     currentAltPacket.absPressure2 = message.abs_pressure;
@@ -411,7 +642,7 @@ void updateAltRadioPacket(int rssi, int snr) {
     currentAltPacket.diffPressure2 = message.diff_pressure;
 
     // FC System status
-    currentAltPacket.SDStatus = SD.begin(BUILTIN_SDCARD);
+    currentAltPacket.SDStatus = sdCardInitialized;
     currentAltPacket.actuatorStatus = digitalRead(TERMINATION_PIN) == LOW;
 
     // Pixhawk System status - from MAVLink message
@@ -443,8 +674,8 @@ void updateAltRadioPacket(int rssi, int snr) {
     currentAltPacket.photodiodeValue1 = photodiodeValue1;
     currentAltPacket.photodiodeValue2 = photodiodeValue2;
 
-    // Battery data - FIXED: Add actual values
-    currentAltPacket.FC_battery_voltage = message.voltage; // Use Pixhawk battery voltage for now
+    // Battery data
+    currentAltPacket.FC_battery_voltage = message.voltage;
     currentAltPacket.LED_battery_voltage = getBatteryVoltage();
 
     GPSmutex.unlock();
@@ -661,67 +892,69 @@ int MAVsetup(){
 }
 
 void MAVLinkAcquire(){
-    // Serial.println("MAVLink thread started - HIGH PRIORITY MODE");
     static unsigned long lastDebug = 0;
     static unsigned long lastRequest = 0;
-    static unsigned long lastActivity = 0;
-    bool dataStreamsRequested = false;
     
-    // while(1){
-        bool hadActivity = false;
+    // Process messages
+    while (Serial2.available() > 0) {
+        bool messageReceived = mavlink.update();
         
-        // Process ALL available messages with minimal delays
-        int messagesThisCycle = 0;
-        while (Serial2.available() > 0) { // Increased limit
-            bool messageReceived = mavlink.update();
-            // bool messageReceived = 1;
+        if (messageReceived) {
+            // Update ALL message data
+            mavlink.getAttitude(message.roll, message.pitch, message.yaw);
+            mavlink.getGPSInfo(message.lat, message.lon, message.alt, message.satellites);
+            mavlink.getBatteryInfo(message.voltage, message.current, message.remaining);
+            mavlink.getVfrHudData(message.airspeed, message.groundspeed, message.heading, 
+                                 message.throttle, message.alt_vfr, message.climb);
+            mavlink.getHighResImu(message.acc_x, message.acc_y, message.acc_z, 
+                                 message.xgyro, message.ygyro, message.zgyro,
+                                 message.xmag, message.ymag, message.zmag, 
+                                 message.abs_pressure, message.diff_pressure, 
+                                 message.temperature, message.pressure_alt);
+            mavlink.getLoggingStats(message.write_rate, message.space_left);
+            mavlink.getVibrationData(message.vibe_x, message.vibe_y, message.vibe_z, 
+                                    message.clipping_x, message.clipping_y, message.clipping_z);
             
-            if (messageReceived) {
-                messagesThisCycle++;
-                hadActivity = true;
-                lastActivity = millis();
-                
-                // Serial.print("MAVLink message #");
-                // Serial.print(messagesThisCycle);
-                // Serial.println(" received!");
-                
-                // Update ALL message data immediately
-                mavlink.getAttitude(message.roll, message.pitch, message.yaw);
-                mavlink.getGPSInfo(message.lat, message.lon, message.alt, message.satellites);
-                mavlink.getBatteryInfo(message.voltage, message.current, message.remaining);
-                mavlink.getVfrHudData(message.airspeed, message.groundspeed, message.heading, message.throttle, message.alt_vfr, message.climb);
-                mavlink.getHighResImu(message.acc_x, message.acc_y, message.acc_z, message.xgyro, message.ygyro, message.zgyro, message.xmag, message.ymag, message.zmag, message.abs_pressure, message.diff_pressure, message.temperature, message.pressure_alt);
-                mavlink.getSystemTime(message.unix_time_usec, message.boot_time_ms);
-                mavlink.getLoggingStats(message.write_rate, message.space_left);
-                mavlink.getVibrationData(message.vibe_x, message.vibe_y, message.vibe_z, message.clipping_x, message.clipping_y, message.clipping_z);
+            // SIMPLIFIED: Direct GPS time access without caching or validation
+            uint64_t gps_time = 0;
+            uint8_t fix_type = 0;
+            uint64_t sys_time = 0;
+            uint32_t boot_time = 0;
+            if (mavlink.getSystemTime(sys_time, boot_time)){
+                message.unix_time_usec = sys_time;
+            } else {
+                message.unix_time_usec = 0;
             }
+
+            // uint64_t gps_time = 0;
+            // if (mavlink.getGpsTime(gps_time, fix_type)){
+            //     message.unix_time_usec = gps_time;
+            // } else {
+            //     message.unix_time_usec = 0;
+            // }
             
-            // NO YIELDING during message processing - stay focused
+            
+            // Always try to get boot time
+            if (message.boot_time_ms == 0) {
+                uint64_t dummy_time = 0;
+                mavlink.getSystemTime(dummy_time, message.boot_time_ms);
+            }
         }
-        
-        // Debug output every 2 seconds instead of 3
-        if (millis() - lastDebug > 500) {
-            // Serial.print("Time:"); Serial.println(message.unix_time_usec);
-            currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds (float)
-            
-            lastDebug = millis();
-        }
-        
-        // Very frequent heartbeat and stream requests
-        // if (millis() - lastRequest > 500) { // Every 500ms instead of 1000ms
-        //     mavlink.sendHeartbeat();
-            
-        //     // Keep requesting streams aggressively
-        //     mavlink.requestAllDataStreams(5); // Higher rate
-        //     Serial.println("Requesting MAVLink data streams (aggressive mode)");
-            
-        //     lastRequest = millis();
-        // }
-        
-        // MINIMAL delay to maximize responsiveness
-        // delay(1); // Absolute minimum delay
-        
+    }
     
+    // Request data streams periodically
+    if (millis() - lastRequest > 5000) {
+        mavlink.requestAllDataStreams(10);
+        lastRequest = millis();
+    }
+    
+    // Simple debug output
+    if (millis() - lastDebug > 5000) {
+        Serial.print("MAVLink: Current GPS time ");
+        Serial.print((unsigned long)(message.unix_time_usec / 1000000));
+        Serial.println(" sec");
+        lastDebug = millis();
+    }
 }
 
 void debugPixhawkData(MavLinkMessage &message){
@@ -759,7 +992,16 @@ void debugPixhawkData(MavLinkMessage &message){
 }
 
 bool getMavlinkTime(uint64_t &gps_time_usec, uint32_t &boot_time_ms){
-    // Remove mutex - just read the data directly
+    // SIMPLIFIED: Direct GPS time access without validation
+    uint8_t fix_type;
+    if (mavlink.getGpsTime(gps_time_usec, fix_type)) {
+        // GPS time available - get boot time separately
+        uint64_t dummy_time;
+        mavlink.getSystemTime(dummy_time, boot_time_ms);
+        return true;
+    }
+    
+    // Fallback to system time if GPS time not available
     bool success = mavlink.getSystemTime(gps_time_usec, boot_time_ms);
     return success;
 }

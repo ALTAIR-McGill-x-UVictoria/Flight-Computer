@@ -5,9 +5,13 @@ static struct {
     float roll, pitch, yaw;
     bool attitude_valid = false;
     
+    // GPS data
     int32_t lat, lon, alt;
     uint8_t satellites;
+    uint64_t gps_time_usec;  // GPS timestamp in microseconds
+    uint8_t gps_fix_type;    // GPS fix type (0-1: no fix, 2: 2D fix, 3: 3D fix)
     bool gps_valid = false;
+    bool gps_time_valid = false;  // Flag for valid GPS time
     
     float voltage, current;
     int8_t remaining;
@@ -149,7 +153,10 @@ bool MavlinkDecoder::update() {
                     mavlink_data.lon = gps.lon;
                     mavlink_data.alt = gps.alt;
                     mavlink_data.satellites = gps.satellites_visible;
+                    mavlink_data.gps_fix_type = gps.fix_type;
+                    mavlink_data.gps_time_usec = gps.time_usec;  // FIXED: Store GPS timestamp
                     mavlink_data.gps_valid = true;
+                    mavlink_data.gps_time_valid = (gps.time_usec > 0); // FIXED: Mark time as valid if non-zero
                     break;
                 }
                 
@@ -528,7 +535,7 @@ void MavlinkDecoder::requestAllDataStreams(uint8_t streamRate) {
         Serial2.write(buffer, len);
         
         // Short delay to avoid flooding the autopilot
-        delay(10);
+        // delay(10);
     }
     
     // For newer ArduPilot/PX4 firmwares, request high-res IMU specifically
@@ -1036,6 +1043,16 @@ bool MavlinkDecoder::getVibrationData(float &vibe_x, float &vibe_y, float &vibe_
         clip_x = mavlink_data.clipping_x;
         clip_y = mavlink_data.clipping_y;
         clip_z = mavlink_data.clipping_z;
+        return true;
+    }
+    return false;
+}
+
+bool MavlinkDecoder::getGpsTime(uint64_t &gps_time_usec, uint8_t &fix_type) {
+    if (mavlink_data.gps_time_valid) {
+        gps_time_usec = mavlink_data.gps_time_usec;
+        fix_type = mavlink_data.gps_fix_type;
+        Serial.println(mavlink_data.gps_time_usec);
         return true;
     }
     return false;

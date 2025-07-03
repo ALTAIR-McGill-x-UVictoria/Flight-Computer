@@ -540,7 +540,7 @@ void MavlinkDecoder::requestAllDataStreams(uint8_t streamRate) {
         Serial2.write(buffer, len);
         
         // Short delay to avoid flooding the autopilot
-        delay(10);
+        // delay(10);
     }
     
     // For newer ArduPilot/PX4 firmwares, request high-res IMU specifically

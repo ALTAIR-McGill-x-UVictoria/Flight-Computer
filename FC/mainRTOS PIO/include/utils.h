@@ -9,6 +9,8 @@
 #define GPS_SERIAL Serial8
 #define TERMINATION_PIN 29
 
+class MavlinkDecoder;
+
 // Define this macro to use altRadioPacket, otherwise radioPacket will be used
 // #define USE_ALT_PACKET
 
@@ -79,8 +81,11 @@ struct MavLinkMessage {
 };
 
 // Declare the global message variable
+extern MavlinkDecoder mavlink;
 extern MavLinkMessage message;
 extern Threads::Mutex MAVLinkMutex;
+
+
 
 // GPS data structure - moved to top before it's used
 struct GPSData {
@@ -200,7 +205,7 @@ struct altRadioPacket {
     float gpsLon2;
     float gpsAlt2;
     float gpsSpeed2;
-    uint32_t gpsTime2;
+    uint64_t gpsTime2;  // CHANGED: from uint32_t to uint64_t to hold full GPS time
     // IMU data 1 (FC)
     float absPressure1;
     float temperature1;
@@ -250,5 +255,11 @@ extern radioPacket currentPacket;
 // Global GPS data instance
 extern GPSData currentGPSData;
 extern Threads::Mutex GPSmutex;
+
+// Add these function declarations to the existing file
+void printSDCardInfo();
+void listSDFiles();
+void checkSDCardStatus();
+void logFlightData();
 
 #endif
