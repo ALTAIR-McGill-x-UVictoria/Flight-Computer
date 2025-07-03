@@ -53,7 +53,7 @@ static struct {
     float highres_xacc, highres_yacc, highres_zacc;
     float highres_xgyro, highres_ygyro, highres_zgyro;
     float highres_xmag, highres_ymag, highres_zmag;
-    float highres_abs_pressure, highres_diff_pressure, highres_temperature;
+    float highres_abs_pressure, highres_diff_pressure, highres_temperature, pressure_alt;
     bool highres_imu_valid = false;
     
     // System time data
@@ -93,6 +93,7 @@ bool MavlinkDecoder::update() {
     // Check for available data on Serial2
     while (Serial2.available() > 0) {
         uint8_t c = Serial2.read();
+        // Serial.println("here");
         
         // Try to parse the MAVLink message
         if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status)) {
@@ -250,6 +251,7 @@ bool MavlinkDecoder::update() {
                     mavlink_data.ymag = imu.ymag;
                     mavlink_data.zmag = imu.zmag;
                     mavlink_data.raw_imu_valid = true;
+                    
                     break;
                 }
                 
@@ -297,6 +299,7 @@ bool MavlinkDecoder::update() {
                     mavlink_data.highres_abs_pressure = imu.abs_pressure;  // hPa
                     mavlink_data.highres_diff_pressure = imu.diff_pressure;  // hPa
                     mavlink_data.highres_temperature = imu.temperature;  // degrees Celsius
+                    mavlink_data.pressure_alt = imu.pressure_alt;  // meters
                     mavlink_data.highres_imu_valid = true;
                     break;
                 }
@@ -566,7 +569,7 @@ void MavlinkDecoder::requestHighResIMU() {
         
         // Send the message
         Serial2.write(buffer, len);
-        delay(20);
+        // delay(20);
     }
     
     // For PX4, directly request HIGHRES_IMU at a higher rate
@@ -602,19 +605,19 @@ void MavlinkDecoder::requestSpecificStreams() {
     // Array of message IDs and rates based on the console commands
     // Format: {MAVLink Message ID, Rate in Hz}
     const StreamInfo streams[] = {
-        {MAVLINK_MSG_ID_ALTITUDE, 10},
-        {MAVLINK_MSG_ID_ATTITUDE, 100},
-        {MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 50},
-        {MAVLINK_MSG_ID_ATTITUDE_TARGET, 10},
+        {MAVLINK_MSG_ID_ALTITUDE, 5},
+        {MAVLINK_MSG_ID_ATTITUDE, 5},
+        {MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 5},
+        {MAVLINK_MSG_ID_ATTITUDE_TARGET, 5},
         {MAVLINK_MSG_ID_CURRENT_EVENT_SEQUENCE, 0},  // 0 means disabled
         {MAVLINK_MSG_ID_ESTIMATOR_STATUS, 1},
         {MAVLINK_MSG_ID_EXTENDED_SYS_STATE, 5},
         {MAVLINK_MSG_ID_HEARTBEAT, 1},
-        {MAVLINK_MSG_ID_HIGHRES_IMU, 50},
+        {MAVLINK_MSG_ID_HIGHRES_IMU, 5},
         {MAVLINK_MSG_ID_LINK_NODE_STATUS, 1},
-        {MAVLINK_MSG_ID_LOCAL_POSITION_NED, 30},
+        {MAVLINK_MSG_ID_LOCAL_POSITION_NED, 5},
         {MAVLINK_MSG_ID_MISSION_CURRENT, 1},
-        {MAVLINK_MSG_ID_ODOMETRY, 30},
+        {MAVLINK_MSG_ID_ODOMETRY, 5},
         {MAVLINK_MSG_ID_OPEN_DRONE_ID_LOCATION, 1},
         {MAVLINK_MSG_ID_PING, 1},
         {MAVLINK_MSG_ID_POSITION_TARGET_LOCAL_NED, 10},
@@ -624,7 +627,7 @@ void MavlinkDecoder::requestSpecificStreams() {
         {MAVLINK_MSG_ID_TIMESYNC, 10},
         {MAVLINK_MSG_ID_GPS_RAW_INT, 5},
         {MAVLINK_MSG_ID_HOME_POSITION, 1},
-        {MAVLINK_MSG_ID_GLOBAL_POSITION_INT, 50},
+        {MAVLINK_MSG_ID_GLOBAL_POSITION_INT, 5},
         {MAVLINK_MSG_ID_VIBRATION, 5}    // Request vibration data at 5Hz
     };
     
@@ -663,7 +666,7 @@ void MavlinkDecoder::requestSpecificStreams() {
         Serial2.write(buffer, len);
         
         // Short delay to avoid flooding the autopilot
-        delay(10);
+        // delay(10);
         
         // Debug output 
         // Serial.print("Requested stream ID ");
@@ -735,7 +738,7 @@ bool MavlinkDecoder::getRcChannels(uint16_t* channels, uint8_t &chancount) {
 bool MavlinkDecoder::getHighResImu(float &xacc, float &yacc, float &zacc, 
                                   float &xgyro, float &ygyro, float &zgyro,
                                   float &xmag, float &ymag, float &zmag,
-                                  float &abs_pressure, float &diff_pressure, float &temperature) {
+                                  float &abs_pressure, float &diff_pressure, float &temperature, float &pressure_alt) {
     if (mavlink_data.highres_imu_valid) {
         xacc = mavlink_data.highres_xacc;
         yacc = mavlink_data.highres_yacc;
@@ -749,6 +752,7 @@ bool MavlinkDecoder::getHighResImu(float &xacc, float &yacc, float &zacc,
         abs_pressure = mavlink_data.highres_abs_pressure;
         diff_pressure = mavlink_data.highres_diff_pressure;
         temperature = mavlink_data.highres_temperature;
+        pressure_alt = mavlink_data.pressure_alt;
         return true;
     }
     return false;
@@ -781,7 +785,7 @@ bool MavlinkDecoder::startLogging() {
     
     uint16_t len = mavlink_msg_to_send_buffer(buffer, &msg);
     Serial2.write(buffer, len);
-    delay(50);  // Wait for processing
+    // delay(50);  // Wait for processing
     
     // Second method: For ArduPilot, set LOG_BACKEND_TYPE parameter to enable file backend
     mavlink_msg_param_set_pack(
@@ -797,7 +801,7 @@ bool MavlinkDecoder::startLogging() {
     
     len = mavlink_msg_to_send_buffer(buffer, &msg);
     Serial2.write(buffer, len);
-    delay(50);  // Wait for processing
+    // delay(50);  // Wait for processing
     
     // Third method: PX4 specific - use a command that the firmware supports
     // Replace custom command with a MAVLink parameter set
@@ -842,7 +846,7 @@ bool MavlinkDecoder::stopLogging() {
     
     uint16_t len = mavlink_msg_to_send_buffer(buffer, &msg);
     Serial2.write(buffer, len);
-    delay(50);  // Wait for processing
+    // delay(50);  // Wait for processing
     
     // Second method: For ArduPilot, set LOG_BACKEND_TYPE parameter to disable
     mavlink_msg_param_set_pack(
@@ -858,7 +862,7 @@ bool MavlinkDecoder::stopLogging() {
     
     len = mavlink_msg_to_send_buffer(buffer, &msg);
     Serial2.write(buffer, len);
-    delay(50);  // Wait for processing
+    // delay(50);  // Wait for processing
     
     // Third method: PX4 specific - use a command that the firmware supports
     // Replace custom command with a MAVLink parameter set
@@ -962,7 +966,7 @@ void MavlinkDecoder::sendShellCommand(const char* command) {
     // Serial.println("Using specific command handlers instead.");
     
     // Give the Pixhawk time to process the command
-    delay(50);
+    // delay(50);
 }
 
 // Helper method to request logging parameters
@@ -991,7 +995,7 @@ void MavlinkDecoder::requestLogParameters() {
         
         uint16_t len = mavlink_msg_to_send_buffer(buffer, &msg);
         Serial2.write(buffer, len);
-        delay(10);
+        // delay(10);
     }
     
     // Serial.println("Requested logging parameters");

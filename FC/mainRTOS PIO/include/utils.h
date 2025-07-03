@@ -7,6 +7,7 @@
 #include "MAVLink.h"  // Make sure to include this for MavLinkMessage
 
 #define GPS_SERIAL Serial8
+#define TERMINATION_PIN 29
 
 // Define this macro to use altRadioPacket, otherwise radioPacket will be used
 // #define USE_ALT_PACKET
@@ -17,6 +18,9 @@ extern IMU_ST_SENSOR_DATA stGyroRawData;
 extern IMU_ST_SENSOR_DATA stAccelRawData;
 extern IMU_ST_SENSOR_DATA stMagnRawData;
 extern Threads::Mutex DAQmutex;
+
+
+
 
 // IMPORTANT: Move MavLinkMessage struct definition here, before it's used
 struct MavLinkMessage {
@@ -53,6 +57,7 @@ struct MavLinkMessage {
     float abs_pressure;
     float diff_pressure;
     float temperature;
+    float pressure_alt;
     // System Time
     uint64_t unix_time_usec;
     uint32_t boot_time_ms;
@@ -96,8 +101,17 @@ int sensorSetup();
 void calibrateIMU();
 void DAQacquire();
 void GPSacquire();
-void photodiodeAcquire(int *photodiodeValue1, int *photodiodeValue2);
+void photodiodeAcquire();
 void photodiodeSetup();
+void batteryAcquire();
+int getBatteryPercentage();
+void isBatteryLow();
+void isBatteryCritical();
+float getBatteryVoltage();
+
+void mavlinkUpdateThread();
+
+extern float batteryVoltage;
 
 // GPS parsing functions
 bool parseGPSString(const char* gpsString, GPSData& data);
@@ -115,6 +129,9 @@ void updateAltRadioPacket(int rssi = 0, int snr = 0);
 // Pixhawk functions
 int MAVsetup();
 void MAVLinkAcquire();
+
+//Accessor
+bool getMavlinkTime(uint64_t &gps_time_usec, uint32_t &boot_time_ms);
 
 // Debug data functions
 void debugPixhawkData(MavLinkMessage &message);

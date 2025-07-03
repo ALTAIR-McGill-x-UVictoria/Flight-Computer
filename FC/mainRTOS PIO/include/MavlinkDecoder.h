@@ -65,7 +65,7 @@ public:
     bool getHighResImu(float &xacc, float &yacc, float &zacc, 
                       float &xgyro, float &ygyro, float &zgyro,
                       float &xmag, float &ymag, float &zmag,
-                      float &abs_pressure, float &diff_pressure, float &temperature);
+                      float &abs_pressure, float &diff_pressure, float &temperature, float &pressure_alt);
 
     // Add this to the public section of your MavlinkDecoder class
     void requestSpecificStreams();

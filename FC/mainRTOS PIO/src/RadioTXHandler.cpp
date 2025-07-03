@@ -6,8 +6,8 @@
 #include <notes.h>
 
 
-// extern altRadioPacket currentAltPacket;
-// extern radioPacket currentPacket;
+extern altRadioPacket currentAltPacket;
+extern radioPacket currentPacket;
 
 Radio::Radio() : timeout(2000) {
     rf95 = new RH_RF95(RFM95_CS, RFM95_INT);
@@ -106,33 +106,43 @@ void Radio::FCradioHandler(const char* packet) {
         Serial.println(reply);
         lastRSSI = rf95->lastRssi();
         lastSNR = rf95->lastSNR();
+        Serial.println(digitalRead(29));
 
         int command;
         float argument;
         
         if (parseReply(reply, command, argument)) {
             currentPacket.ack = command;
+            currentAltPacket.ack = command;
             
             switch (command) {
             case 1:
                 playPingJingle();
-                currentPacket.ack = 1;
                 break;
-            // other cases...
+            case 2:
+                break;
             case 6:
                 // calibrateIMU();
                 break;
             case 19:
-              digitalWrite(29,HIGH);
+                // Terminate
+              Serial.println("Energizing actuator");
+              digitalWrite(29,LOW);
               break;
             case 20:
-              digitalWrite(29,LOW);
+                // Reset termination
+              Serial.println("Resetting actuator");
+              digitalWrite(29,HIGH);
             default:
+                currentPacket.ack = 0;
+                currentAltPacket.ack = 0;
                 break;
             }
         } else {
             currentPacket.ack = 0;
+            currentAltPacket.ack = 0;
         }
+
     } else {
         Serial.println("No reply received");
     }
