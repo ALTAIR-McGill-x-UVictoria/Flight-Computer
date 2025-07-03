@@ -22,6 +22,8 @@ extern Threads::Mutex DAQmutex;
 
 
 
+
+
 // IMPORTANT: Move MavLinkMessage struct definition here, before it's used
 struct MavLinkMessage {
     // Attitude data
