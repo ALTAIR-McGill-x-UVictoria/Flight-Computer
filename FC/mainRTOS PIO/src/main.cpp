@@ -39,8 +39,8 @@
 #define TRACKING_LED_GREEN_PIN 4
 #define TRACKING_LED_RED_PIN 5
 
-#define LED_TRACKING_INTERVAL 1000 //ms
-#define LED_SOURCE_INTERVAL 10000 //ms
+#define LED_TRACKING_INTERVAL 5000 //ms
+#define LED_SOURCE_INTERVAL 20000 //ms
 
 
 // Singleton instances
@@ -215,8 +215,8 @@ void LEDHandler(){
     
     // while(1){
         // Update cached time only every 5 seconds to reduce MAVLink calls
-        if (millis() - last_time_update > 2000) {
-            
+        if (millis() - last_time_update > 5) {
+            cached_gps_time = message.unix_time_usec;  // Get GPS time in microseconds
             last_time_update = millis();
         }
         
@@ -232,26 +232,34 @@ void LEDHandler(){
 }
 
 void sourceLEDCached(uint64_t gps_time_usec){
-    static uint32_t last_gps_millis = 0;  // Store last known GPS time in millis
+    static uint32_t last_gps_seconds = 0;  // Store last known GPS time in seconds
     static unsigned long gps_lost_time = 0;  // When GPS was lost
     static bool had_gps_fix = false;  // Track if we ever had GPS
     
     if (gps_time_usec > 0) {
         // GPS is available - use GPS time
-        uint32_t gps_time_millis = (uint32_t)(gps_time_usec / 1000);  // Convert to milliseconds
-        last_gps_millis = gps_time_millis;
+        uint32_t gps_time_seconds = (uint32_t)(gps_time_usec / 1000000);  // Convert microseconds to seconds
+        last_gps_seconds = gps_time_seconds;
         had_gps_fix = true;
         
-        // Calculate current minute from GPS time
-        uint32_t gps_time_seconds = gps_time_millis / 1000;
+        // Calculate current minute from Unix timestamp
         uint32_t current_minute = (gps_time_seconds / 60) % 60;
         
-        // Serial.println("Current minute: " + String(current_minute));
+        Serial.print("GPS Source LED - Current minute: ");
+        Serial.print(current_minute);
+        Serial.print(" (GPS time: ");
+        Serial.print(gps_time_seconds);
+        Serial.println(")");
 
         // Source LED only flashes during EVEN minutes (0, 2, 4, 6, ...)
         if (current_minute % 2 == 0) {
             // Flash at LED_SOURCE_INTERVAL during even minutes
-            if ((gps_time_millis % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
+            // Use the seconds within the current minute for timing
+            uint32_t seconds_in_minute = gps_time_seconds % 60;
+            uint32_t millis_in_second = (gps_time_usec / 1000) % 1000;
+            uint32_t total_millis_in_minute = (seconds_in_minute * 1000) + millis_in_second;
+            
+            if ((total_millis_in_minute % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
                 digitalWrite(SOURCE_LED_PIN, HIGH);
             } else {
                 digitalWrite(SOURCE_LED_PIN, LOW);
@@ -267,15 +275,19 @@ void sourceLEDCached(uint64_t gps_time_usec){
         }
         
         // Calculate continued time: last GPS time + elapsed Teensy time since loss
-        uint32_t continued_time = last_gps_millis + (millis() - gps_lost_time);
-        uint32_t continued_seconds = continued_time / 1000;
+        uint32_t elapsed_seconds = (millis() - gps_lost_time) / 1000;
+        uint32_t continued_seconds = last_gps_seconds + elapsed_seconds;
         uint32_t current_minute = (continued_seconds / 60) % 60;
+        
+        Serial.print("GPS Lost - Source LED minute: ");
+        Serial.println(current_minute);
         
         // Source LED only flashes during EVEN minutes
         if (current_minute % 2 == 0) {
-            // Serial.println("Source minute: " + String(current_minute));
-            if ((continued_time % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
-                // Serial.println("SOURCE LED ON");
+            uint32_t continued_millis = (continued_seconds * 1000) + ((millis() - gps_lost_time) % 1000);
+            uint32_t millis_in_minute = continued_millis % 60000;  // Milliseconds within current minute
+            
+            if ((millis_in_minute % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
                 digitalWrite(SOURCE_LED_PIN, HIGH);
             } else {
                 digitalWrite(SOURCE_LED_PIN, LOW);
@@ -285,19 +297,22 @@ void sourceLEDCached(uint64_t gps_time_usec){
         }
     } else {
         // Never had GPS fix - use simple Teensy clock timing with minute check
-        // uint32_t teensy_seconds = millis() / 1000;
-        // uint32_t current_minute = (teensy_seconds / 60) % 60;
+        uint32_t teensy_seconds = millis() / 1000;
+        uint32_t current_minute = (teensy_seconds / 60) % 60;
         
-        // // Source LED only flashes during EVEN minutes
-        // if (current_minute % 2 == 0) {
-        //     if ((millis() % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
-        //         digitalWrite(SOURCE_LED_PIN, HIGH);
-        //     } else {
-        //         digitalWrite(SOURCE_LED_PIN, LOW);
-        //     }
-        // } else {
-        //     digitalWrite(SOURCE_LED_PIN, LOW);
-        // }
+        Serial.print("No GPS - Source LED minute: ");
+        Serial.println(current_minute);
+        
+        // Source LED only flashes during EVEN minutes
+        if (current_minute % 2 == 0) {
+            if ((millis() % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2)) {
+                digitalWrite(SOURCE_LED_PIN, HIGH);
+            } else {
+                digitalWrite(SOURCE_LED_PIN, LOW);
+            }
+        } else {
+            digitalWrite(SOURCE_LED_PIN, LOW);
+        }
     }
     
     // Reset GPS lost time when GPS comes back
@@ -307,27 +322,34 @@ void sourceLEDCached(uint64_t gps_time_usec){
 }
 
 void trackingLEDCached(uint64_t gps_time_usec){
-    static uint32_t last_gps_millis = 0;  // Store last known GPS time in millis
+    static uint32_t last_gps_seconds = 0;  // Store last known GPS time in seconds
     static unsigned long gps_lost_time = 0;  // When GPS was lost
     static bool had_gps_fix = false;  // Track if we ever had GPS
     
     if (gps_time_usec > 0) {
         // GPS is available - use GPS time
-        uint32_t gps_time_millis = (uint32_t)(gps_time_usec / 1000);  // Convert to milliseconds
-        last_gps_millis = gps_time_millis;
+        uint32_t gps_time_seconds = (uint32_t)(gps_time_usec / 1000000);  // Convert microseconds to seconds
+        last_gps_seconds = gps_time_seconds;
         had_gps_fix = true;
         
-        // Calculate current minute from GPS time
-        uint32_t gps_time_seconds = gps_time_millis / 1000;
+        // Calculate current minute from Unix timestamp
         uint32_t current_minute = (gps_time_seconds / 60) % 60;
-
-        // Serial.println("Current minute: " + String(current_minute));
+        
+        Serial.print("GPS Tracking LED - Current minute: ");
+        Serial.print(current_minute);
+        Serial.print(" (GPS time: ");
+        Serial.print(gps_time_seconds);
+        Serial.println(")");
         
         // Tracking LED only flashes during ODD minutes (1, 3, 5, 7, ...)
         if (current_minute % 2 == 1) {
-            // Serial.println("Tracking minute: " + String(current_minute));
             // Flash at LED_TRACKING_INTERVAL during odd minutes
-            if ((gps_time_millis % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
+            // Use the seconds within the current minute for timing
+            uint32_t seconds_in_minute = gps_time_seconds % 60;
+            uint32_t millis_in_second = (gps_time_usec / 1000) % 1000;
+            uint32_t total_millis_in_minute = (seconds_in_minute * 1000) + millis_in_second;
+            
+            if ((total_millis_in_minute % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
                 digitalWrite(TRACKING_LED_GREEN_PIN, HIGH);
                 digitalWrite(TRACKING_LED_RED_PIN, LOW);
             } else {
@@ -346,13 +368,19 @@ void trackingLEDCached(uint64_t gps_time_usec){
         }
         
         // Calculate continued time: last GPS time + elapsed Teensy time since loss
-        uint32_t continued_time = last_gps_millis + (millis() - gps_lost_time);
-        uint32_t continued_seconds = continued_time / 1000;
+        uint32_t elapsed_seconds = (millis() - gps_lost_time) / 1000;
+        uint32_t continued_seconds = last_gps_seconds + elapsed_seconds;
         uint32_t current_minute = (continued_seconds / 60) % 60;
+        
+        Serial.print("GPS Lost - Tracking LED minute: ");
+        Serial.println(current_minute);
         
         // Tracking LED only flashes during ODD minutes
         if (current_minute % 2 == 1) {
-            if ((continued_time % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
+            uint32_t continued_millis = (continued_seconds * 1000) + ((millis() - gps_lost_time) % 1000);
+            uint32_t millis_in_minute = continued_millis % 60000;  // Milliseconds within current minute
+            
+            if ((millis_in_minute % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
                 digitalWrite(TRACKING_LED_GREEN_PIN, HIGH);
                 digitalWrite(TRACKING_LED_RED_PIN, LOW);
             } else {
@@ -365,22 +393,25 @@ void trackingLEDCached(uint64_t gps_time_usec){
         }
     } else {
         // Never had GPS fix - use simple Teensy clock timing with minute check
-        // uint32_t teensy_seconds = millis() / 1000;
-        // uint32_t current_minute = (teensy_seconds / 60) % 60;
+        uint32_t teensy_seconds = millis() / 1000;
+        uint32_t current_minute = (teensy_seconds / 60) % 60;
         
-        // // Tracking LED only flashes during ODD minutes
-        // if (current_minute % 2 == 1) {
-        //     if ((millis() % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
-        //         digitalWrite(TRACKING_LED_GREEN_PIN, HIGH);
-        //         digitalWrite(TRACKING_LED_RED_PIN, LOW);
-        //     } else {
-        //         digitalWrite(TRACKING_LED_GREEN_PIN, LOW);
-        //         digitalWrite(TRACKING_LED_RED_PIN, HIGH);
-        //     }
-        // } else {
-        //     digitalWrite(TRACKING_LED_GREEN_PIN, LOW);
-        //     digitalWrite(TRACKING_LED_RED_PIN, LOW);
-        // }
+        Serial.print("No GPS - Tracking LED minute: ");
+        Serial.println(current_minute);
+        
+        // Tracking LED only flashes during ODD minutes
+        if (current_minute % 2 == 1) {
+            if ((millis() % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2)) {
+                digitalWrite(TRACKING_LED_GREEN_PIN, HIGH);
+                digitalWrite(TRACKING_LED_RED_PIN, LOW);
+            } else {
+                digitalWrite(TRACKING_LED_GREEN_PIN, LOW);
+                digitalWrite(TRACKING_LED_RED_PIN, HIGH);
+            }
+        } else {
+            digitalWrite(TRACKING_LED_GREEN_PIN, LOW);
+            digitalWrite(TRACKING_LED_RED_PIN, LOW);
+        }
     }
     
     // Reset GPS lost time when GPS comes back

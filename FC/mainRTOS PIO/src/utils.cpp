@@ -701,7 +701,7 @@ void MAVLinkAcquire(){
         
         // Debug output every 2 seconds instead of 3
         if (millis() - lastDebug > 500) {
-            Serial.print("Time:"); Serial.println(message.unix_time_usec);
+            // Serial.print("Time:"); Serial.println(message.unix_time_usec);
             currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds (float)
             
             lastDebug = millis();
