@@ -9,7 +9,6 @@
 #include "Streaming.h"
 #include "RadioTXHandler.h"
 
-#define LED_ENABLE 1
 #define SOURCE_LED_PIN 6
 #define TRACKING_LED_GREEN_PIN 4
 #define TRACKING_LED_RED_PIN 5
@@ -710,7 +709,7 @@ void MAVLinkAcquire(){
         // Debug output every 2 seconds instead of 3
         if (millis() - lastDebug > 500) {
             Serial.print("Time:"); Serial.println(message.unix_time_usec);
-            currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds (float)
+            // currentAltPacket.gpsTime2 = message.unix_time_usec / 1000000; // Convert to seconds (float)
             
             lastDebug = millis();
         }

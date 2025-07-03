@@ -18,6 +18,8 @@
 // #include "linker.h"
 // #include "autopilot_interface.h"
 
+#define LED_ENABLE 0
+
 //Callsign
 #define CALLSIGN "VA2ETD"
 
