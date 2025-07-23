@@ -236,10 +236,10 @@ void logFlightData() {
     DAQmutex.lock();
     GPSmutex.lock();
     
-    // Read LED pin states
-    int led_source = digitalRead(6);           // Source
-    int led_tracking_green = digitalRead(4); // Green
-    int led_tracking_red = digitalRead(5);     // Red
+    // Read LED pin states (GPIO status)
+    int led_source = digitalRead(6);           // Source LED (pin 6)
+    int led_tracking_green = digitalRead(4);   // Green tracking LED (pin 4)
+    int led_tracking_red = digitalRead(5);     // Red tracking LED (pin 5)
     
     // Read termination pin state
     int termination_state = digitalRead(29);
@@ -263,16 +263,24 @@ void logFlightData() {
         Serial.println((unsigned long)(current_gps_time / 1000000));
     }
     
-    // Create comprehensive flight data string
+    // FIXED: Proper GPS altitude conversion for logging
+    float gps_altitude_meters;
+    if (message.alt != 0) {
+        gps_altitude_meters = message.alt / 1000.0f; // Convert mm to meters
+    } else {
+        gps_altitude_meters = message.alt_vfr; // Fallback to VFR altitude
+    }
+    
+    // Create comprehensive flight data string with GPIO status
     String logData = 
         // Time data first - use current GPS time directly
         String(current_gps_time) + "," +                   // GPS UTC time (unix usec)
         String(millis()) + "," +                           // FC boot time (ms)
         
-        // GPS data
+        // GPS data - FIXED: Use properly converted altitude
         String(message.lat / 1.0e7f, 7) + "," +           // GPS latitude
         String(message.lon / 1.0e7f, 7) + "," +           // GPS longitude
-        String(message.alt_vfr, 2) + "," +                // GPS altitude
+        String(gps_altitude_meters, 2) + "," +             // GPS altitude in meters
         
         // Barometric data
         String(message.abs_pressure, 2) + "," +           // Pixhawk barometer pressure
@@ -290,11 +298,11 @@ void logFlightData() {
         String(photodiodeValue1) + "," +                  // Photodiode 1
         String(photodiodeValue2) + "," +                  // Photodiode 2
         
-        // Digital pin states
-        String(led_source) + "," +                        // LED source pin 6
-        String(led_tracking_green) + "," +                // LED tracking green pin 4
-        String(led_tracking_red) + "," +                  // LED tracking red pin 5
-        String(termination_state) + "," +                 // Termination pin 29
+        // GPIO pin states (UPDATED: Added individual pin status)
+        String(led_tracking_green) + "," +                // GPIO Pin 4 status (0=LOW, 1=HIGH)
+        String(led_tracking_red) + "," +                  // GPIO Pin 5 status (0=LOW, 1=HIGH)
+        String(led_source) + "," +                        // GPIO Pin 6 status (0=LOW, 1=HIGH)
+        String(termination_state) + "," +                 // Termination pin 29 status
         
         // Communication data
         String(currentAltPacket.ack) + "," +              // Command ACK
