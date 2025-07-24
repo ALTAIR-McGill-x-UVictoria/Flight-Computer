@@ -14,8 +14,8 @@
 
 // Termination parameters
 #define ENABLE_TERMINATION 1
-#define TARGET_PRESSURE 19.3f
-#define TARGET_ALTITUDE 100.0f
+#define TARGET_PRESSURE 19300.0f
+#define TARGET_ALTITUDE 12000
 
 // Macros
 #define GPS_SERIAL Serial8
@@ -25,7 +25,7 @@
 
 // LED configuration
 #define LED_ENABLE 1
-#define LED_AS_THREAD 1
+#define LED_AS_THREAD 0
 #define SOURCE_LED_PIN 6
 #define TRACKING_LED_GREEN_PIN 4
 #define TRACKING_LED_RED_PIN 5
@@ -136,8 +136,9 @@ void loop() {
 }
 
 void terminationHandler() {
+    // Serial.print("Pressure:");
+    // Serial.println(message.abs_pressure);
     if ((message.abs_pressure < TARGET_PRESSURE && message.abs_pressure > 5.0) ||
-        (message.alt < TARGET_ALTITUDE && message.alt > 10) ||
         (millis() > 5400000)) {
         digitalWrite(TERMINATION_PIN, LOW);
     }
@@ -203,65 +204,65 @@ void LEDHandler() {
             //     last_debug = millis();
             // }
         }
+        threads.yield();
     }
+
 }
-#elif
+#else
+
 void LEDHandler() {
-    
     uint64_t gps_time = 0;
     uint8_t fix_type = 0;
     
-    if (mavlink.getGpsTime(gps_time, fix_type)) {
-        // GPS available - calculate current minute
-        uint64_t gps_seconds = gps_time / 1000000ULL;  // Convert to seconds
+    if (1) {
+        // GPS available - calculate current minute and second
+        uint64_t gps_seconds = message.unix_time_usec / 1000000;  // Convert to seconds
         uint32_t current_minute = (gps_seconds / 60) % 60;  // Minutes within hour (0-59)
+        uint32_t current_second = gps_seconds % 60;  // Seconds within minute (0-59)
         
-        // Calculate milliseconds within the current minute (0-59999)
-        uint64_t seconds_since_minute_start = gps_seconds % 60;  // Seconds within minute (0-59)
-        uint32_t microseconds_in_second = (uint32_t)(gps_time % 1000000ULL);
-        uint32_t millis_in_second = microseconds_in_second / 1000;
-        uint32_t total_millis_in_minute = (seconds_since_minute_start * 1000) + millis_in_second;
-        
-        if (current_minute % 2 == 1) {
-            // Even minutes (0,2,4,6...): Source LED flashes every 20 seconds, tracking LEDs off
-            digitalWrite(SOURCE_LED_PIN, (total_millis_in_minute % LED_SOURCE_INTERVAL) < (LED_SOURCE_INTERVAL / 2));
+        if (current_minute % 2 == 0) {
+            // Odd minutes (1,3,5,7...): Source LED flashes every 20 seconds, tracking LEDs off
+            // Source LED: ON for 10s (0-9, 20-29, 40-49), OFF for 10s (10-19, 30-39, 50-59)
+            bool source_on = ((current_second % 20) < 10);
+            digitalWrite(SOURCE_LED_PIN, source_on);
             digitalWrite(TRACKING_LED_GREEN_PIN, LOW);
             digitalWrite(TRACKING_LED_RED_PIN, LOW);
         } else {
-            // Odd minutes (1,3,5,7...): Source LED off, tracking LEDs alternate every 250ms
+            // Even minutes (0,2,4,6...): Source LED off, tracking LEDs alternate every 1 second
             digitalWrite(SOURCE_LED_PIN, LOW);
-            bool green_on = (total_millis_in_minute % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2);
+            // Green LED on for even seconds (0,2,4,6...), Red LED on for odd seconds (1,3,5,7...)
+            bool green_on = (current_second % 2) == 0;
             digitalWrite(TRACKING_LED_GREEN_PIN, green_on);
             digitalWrite(TRACKING_LED_RED_PIN, !green_on);
         }
         
-        // // Enhanced debug every 5 seconds
-        // static unsigned long last_debug = 0;
-        // if (millis() - last_debug > 5000) {
-        //     Serial.print("GPS LED - UTC time: ");
-        //     Serial.print((unsigned long)gps_seconds);
-        //     Serial.print("s, Minute: ");
-        //     Serial.print(current_minute);
-        //     Serial.print(" (");
-        //     Serial.print(current_minute % 2 == 0 ? "EVEN-Source" : "ODD-Tracking");
-        //     Serial.print("), ms_in_min: ");
-        //     Serial.print(total_millis_in_minute);
-        //     Serial.print(", fix: ");
-        //     Serial.println(fix_type);
-        //     last_debug = millis();
-        // }
+        // Enhanced debug every 5 seconds
+        static unsigned long last_debug = 0;
+        if (millis() - last_debug > 5000) {
+            Serial.print("GPS LED - UTC time: ");
+            Serial.print((unsigned long)gps_seconds);
+            Serial.print("s, Minute: ");
+            Serial.print(current_minute);
+            Serial.print(", Second: ");
+            Serial.print(current_second);
+            Serial.print(" (");
+            Serial.print(current_minute % 2 == 1 ? "ODD-Source" : "EVEN-Tracking");
+            Serial.println(")");
+            last_debug = millis();
+        }
     } else {
-        // No GPS: Source off, tracking LEDs alternate continuously
+        // No GPS: Source off, tracking LEDs alternate continuously using Teensy seconds
         digitalWrite(SOURCE_LED_PIN, LOW);
-        bool green_on = (millis() % LED_TRACKING_INTERVAL) < (LED_TRACKING_INTERVAL / 2);
+        uint32_t teensy_seconds = millis() / 1000;
+        bool green_on = (teensy_seconds % 2) == 0;
         digitalWrite(TRACKING_LED_GREEN_PIN, green_on);
         digitalWrite(TRACKING_LED_RED_PIN, !green_on);
         
-        // static unsigned long last_debug = 0;
-        // if (millis() - last_debug > 10000) {
-        //     Serial.println("No GPS - fallback LEDs");
-        //     last_debug = millis();
-        // }
+        static unsigned long last_debug = 0;
+        if (millis() - last_debug > 10000) {
+            Serial.println("No GPS - fallback LEDs (1 sec intervals)");
+            last_debug = millis();
+        }
     }
 }
 #endif
