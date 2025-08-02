@@ -463,7 +463,7 @@ void formRadioPacket(char* packet, size_t packet_size) {
     
     // Add %.2f for bearing in format string
     int written = snprintf(packet, packet_size,
-        "FC:%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
+        "FC:%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d",
         currentPacket.ack,
         currentPacket.RSSI,
         currentPacket.SNR,
@@ -473,6 +473,9 @@ void formRadioPacket(char* packet, size_t packet_size) {
         currentPacket.Pressure,
         currentPacket.Temperature,
         currentPacket.Altitude,
+        currentPacket.acc_x,
+        currentPacket.acc_y,
+        currentPacket.acc_z,
         currentPacket.SDStatus ? 1 : 0,
         currentPacket.actuatorStatus ? 1 : 0,
         currentPacket.photodiodeValue1,

@@ -133,6 +133,9 @@ void loop() {
         logFlightData();
         lastSDLogTime = millis();
     }
+
+    Serial.println(currentPacket.acc_x);
+
 }
 
 void terminationHandler() {

@@ -170,6 +170,9 @@ struct radioPacket {
     float Pressure;
     float Temperature;
     float Altitude;
+    float acc_x;
+    float acc_y;
+    float acc_z;
     // System status
     bool SDStatus;
     bool actuatorStatus;
