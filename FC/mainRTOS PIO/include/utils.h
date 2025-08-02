@@ -238,6 +238,10 @@ struct altRadioPacket {
     float gpsBearingGroundSpeed;
     float gpsBearingGroundSpeedMagnetic;
     float gpsBearingGroundSpeedTrue;
+    // Pixhawk Acceleration data
+    float acc_x;
+    float acc_y;
+    float acc_z;
     // Photodiode data
     int photodiodeValue1;
     int photodiodeValue2;

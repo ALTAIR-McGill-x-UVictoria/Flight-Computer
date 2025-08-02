@@ -507,13 +507,14 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
         "%d,%d,%d," // ack, RSSI, SNR
         ",%lu," // FC time: fc_unix_time_usec, fc_boot_time_ms
         "%.6f,%.6f,%.2f,%.2f,%llu," // Pixhawk GPS: lat2, lon2, alt2, speed2, time2
-        ",,," // FC IMU: absPressure1, temperature1, altitude1
-        "%.2f,%.2f,%.2f," // Pixhawk IMU: absPressure2, temperature2, diffPressure2
+         // FC IMU: absPressure1, temperature1, altitude1
+        "%.2f,%.2f,%.2f," // Pixhawk IMU: absPressure2, temperature2, altitude1
+        "%.2f,%.2f,%.2f," // Pixhawk Acceleration: acc_x, acc_y, acc_z
         "%d,%d," // FC Status: SDStatus, actuatorStatus
         "%d,%lu,%lu," // Pixhawk Status: logging_active, write_rate, space_left
-        ",%lu," // Pixhawk Time: pix_unix_time_usec, pix_boot_time_ms
-        ",,,,,," // Vibration: vibe_x, vibe_y, vibe_z, clip_x, clip_y, clip_z
-        "%.2f,%.2f,,,," // Navigation: gpsBearing, gpsBearingMagnetic, gpsBearingTrue, gpsBearingGroundSpeed, gpsBearingGroundSpeedMagnetic, gpsBearingGroundSpeedTrue
+        // ",," // Pixhawk Time: pix_unix_time_usec, pix_boot_time_ms
+        // ",,,,,," // Vibration: vibe_x, vibe_y, vibe_z, clip_x, clip_y, clip_z
+        "%.2f," // Navigation: gpsBearing, gpsBearingMagnetic, gpsBearingTrue, gpsBearingGroundSpeed, gpsBearingGroundSpeedMagnetic, gpsBearingGroundSpeedTrue
         "%d,%d," // Photodiodes: value1, value2
         "%.2f,%.2f", // FIXED: Added battery voltages format specifiers
         currentAltPacket.ack,
@@ -532,15 +533,18 @@ void formAltRadioPacket(char* packet, size_t packet_size) {
         currentAltPacket.absPressure2,
         currentAltPacket.temperature2,
         currentAltPacket.altitude1,
+        currentAltPacket.acc_x,
+        currentAltPacket.acc_y,
+        currentAltPacket.acc_z,
         currentAltPacket.SDStatus ? 1 : 0,
         currentAltPacket.actuatorStatus ? 1 : 0,
         currentAltPacket.logging_active ? 1 : 0,
         currentAltPacket.write_rate,
         currentAltPacket.space_left,
         // currentAltPacket.pix_unix_time_usec,
-        currentAltPacket.pix_boot_time_ms,
+        // currentAltPacket.pix_boot_time_ms,
         currentAltPacket.gpsBearing,
-        currentAltPacket.gpsBearingMagnetic,
+        // currentAltPacket.gpsBearingMagnetic,
         // currentAltPacket.gpsBearingTrue,
         // currentAltPacket.gpsBearingGroundSpeed,
         // currentAltPacket.gpsBearingGroundSpeedMagnetic,
@@ -648,6 +652,11 @@ void updateAltRadioPacket(int rssi, int snr) {
     currentAltPacket.absPressure2 = message.abs_pressure;
     currentAltPacket.temperature2 = message.temperature;
     currentAltPacket.diffPressure2 = message.diff_pressure;
+
+    // Acceleration data - from MAVLink message
+    currentAltPacket.acc_x = message.acc_x;
+    currentAltPacket.acc_y = message.acc_y;
+    currentAltPacket.acc_z = message.acc_z;
 
     // FC System status
     currentAltPacket.SDStatus = sdCardInitialized;
